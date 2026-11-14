@@ -40,7 +40,11 @@ public class Enemy {
         rig = origRig;
         inner = new Group(rig.root);
         inner.setTranslateY(-55);
+<<<<<<< HEAD
         shadow = cylY(1, 0.4, SHADOW_MAT, 0, -0.3, 0, 32);
+=======
+        shadow = cylY(1, 0.4, SHADOW_MAT, 0, -0.3, 0);
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
         shadow.setScaleX(22);
         shadow.setScaleZ(22);
         scaleT = new Scale(sx, sy, sx);

@@ -2,15 +2,19 @@ package com.blackout.game.core;
 
 import java.util.HashMap;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.function.BiPredicate;
 
 import javafx.scene.Group;
 import javafx.scene.image.Image;
+=======
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
 import javafx.scene.image.PixelWriter;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Box;
+<<<<<<< HEAD
 import javafx.scene.shape.CullFace;
 import javafx.scene.shape.Cylinder;
 import javafx.scene.shape.MeshView;
@@ -32,11 +36,29 @@ public final class Gfx {
 
     public static PhongMaterial mat(Color d, Color s, double p) {
         PhongMaterial m = new PhongMaterial(d);
+=======
+import javafx.scene.shape.Cylinder;
+import javafx.scene.shape.Sphere;
+import javafx.scene.transform.Rotate;
+
+public final class Gfx {
+
+    private Gfx() {
+    }
+
+    private static final Map<Color, PhongMaterial> GLOW_CACHE = new HashMap<>();
+    public static final PhongMaterial SHADOW_MAT = mat(Color.rgb(0, 0, 0, 0.4), Color.BLACK, 1);
+
+    public static PhongMaterial mat(Color d, Color s, double p) {
+        PhongMaterial m = new PhongMaterial();
+        m.setDiffuseColor(d);
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
         m.setSpecularColor(s);
         m.setSpecularPower(p);
         return m;
     }
 
+<<<<<<< HEAD
     public static PhongMaterial tex(Image img, Color spec, double p) {
         PhongMaterial m = new PhongMaterial(Color.WHITE);
         m.setDiffuseMap(img);
@@ -60,6 +82,19 @@ public final class Gfx {
         return GLOW.computeIfAbsent(c, col -> {
             PhongMaterial m = new PhongMaterial(Color.BLACK);
             m.setSelfIlluminationMap(solid(col));
+=======
+    public static PhongMaterial glow(Color c) {
+        return GLOW_CACHE.computeIfAbsent(c, col -> {
+            PhongMaterial m = new PhongMaterial(Color.BLACK);
+            WritableImage img = new WritableImage(2, 2);
+            PixelWriter pw = img.getPixelWriter();
+            for (int y = 0; y < 2; y++) {
+                for (int x = 0; x < 2; x++) {
+                    pw.setColor(x, y, col);
+                }
+            }
+            m.setSelfIlluminationMap(img);
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
             m.setSpecularColor(Color.BLACK);
             return m;
         });
@@ -75,12 +110,16 @@ public final class Gfx {
     }
 
     public static Cylinder cylY(double r, double len, PhongMaterial m, double x, double y, double z) {
+<<<<<<< HEAD
         return cylY(r, len, m, x, y, z, 12);
     }
 
     /** Cylinder with an explicit number of divisions (use more for big or scaled discs such as lakes and shadows). */
     public static Cylinder cylY(double r, double len, PhongMaterial m, double x, double y, double z, int div) {
         Cylinder c = new Cylinder(r, len, div);
+=======
+        Cylinder c = new Cylinder(r, len);
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
         c.setMaterial(m);
         c.setTranslateX(x);
         c.setTranslateY(y);
@@ -88,6 +127,16 @@ public final class Gfx {
         return c;
     }
 
+<<<<<<< HEAD
+=======
+    public static Cylinder cyl(double r, double len, PhongMaterial m, double x, double y, double z) {
+        Cylinder c = cylY(r, len, m, x, y, z);
+        c.setRotationAxis(Rotate.X_AXIS);
+        c.setRotate(90);
+        return c;
+    }
+
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
     public static Cylinder cylX(double r, double len, PhongMaterial m, double x, double y, double z) {
         Cylinder c = cylY(r, len, m, x, y, z);
         c.setRotationAxis(Rotate.Z_AXIS);
@@ -95,6 +144,7 @@ public final class Gfx {
         return c;
     }
 
+<<<<<<< HEAD
     public static Cylinder cylZ(double r, double len, PhongMaterial m, double x, double y, double z) {
         Cylinder c = cylY(r, len, m, x, y, z);
         c.setRotationAxis(Rotate.X_AXIS);
@@ -114,6 +164,10 @@ public final class Gfx {
 
     public static Sphere sph(double r, PhongMaterial m, double x, double y, double z, double sx, double sy, double sz, int div) {
         Sphere s = new Sphere(r, div);
+=======
+    public static Sphere sph(double r, PhongMaterial m, double x, double y, double z, double sx, double sy, double sz) {
+        Sphere s = new Sphere(r, 20);
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
         s.setMaterial(m);
         s.setTranslateX(x);
         s.setTranslateY(y);
@@ -123,6 +177,7 @@ public final class Gfx {
         s.setScaleZ(sz);
         return s;
     }
+<<<<<<< HEAD
 
     /** A beam (square section) from point 1 to point 2. */
     public static Box strut(double x1, double y1, double z1, double x2, double y2, double z2, double t, PhongMaterial m) {
@@ -240,4 +295,6 @@ public final class Gfx {
         mv.setCullFace(CullFace.BACK);
         return mv;
     }
+=======
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
 }

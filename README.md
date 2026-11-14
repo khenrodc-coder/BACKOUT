@@ -30,9 +30,13 @@ BLACKOUT/
     │   │   ├── Main.java           JavaFX Application: game loop, input, HUD, world build
     │   │   ├── core/
     │   │   │   ├── Constants.java  shared constants (GROUND_Y, zombie/state ids, RNG)
+<<<<<<< HEAD
     │   │   │   ├── Gfx.java        3D building blocks (box, sph, cylY/X/Z, strut, cable, plane, crossQuads ...)
     │   │   │   ├── Mats.java       cached realistic materials (grass, asphalt, brick, bark, paint ...)
     │   │   │   └── TextureFactory.java  procedural tileable textures (no image files needed)
+=======
+    │   │   │   └── Gfx.java        mesh/material helpers (box, sph, cylY, mat, glow ...)
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
     │   │   ├── entities/
     │   │   │   ├── Enemy.java      zombie model, stats, animation, blood-moon form
     │   │   │   ├── Rig.java        articulated character skeleton
@@ -42,12 +46,15 @@ BLACKOUT/
     │   │   │   └── Grenade.java
     │   │   ├── environment/
     │   │   │   ├── Building.java
+<<<<<<< HEAD
     │   │   │   ├── BuildingDetail.java  porch, shutters, boards, chimney, gutter
     │   │   │   ├── BridgeFactory.java   steel-truss road bridge
     │   │   │   ├── TowerFactory.java    radio towers, monopoles, power pylons
     │   │   │   ├── TreeFactory.java     pine / oak / birch / dead trees with wind sway
     │   │   │   ├── VegetationFactory.java  grass chunks, bushes, debris
     │   │   │   ├── VehicleFactory.java  sedan / SUV / pickup / van (clean, wreck, burnt)
+=======
+>>>>>>> 7ab94253a3fe49932fb5341cdbe322138aacef9c
     │   │   │   ├── Obstacle.java
     │   │   │   ├── Car.java
     │   │   │   ├── Fire.java
