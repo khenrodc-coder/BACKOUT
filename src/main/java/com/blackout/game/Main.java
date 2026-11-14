@@ -1,5 +1,15 @@
 package com.blackout.game;
 
+import com.blackout.game.core.Gfx;
+import com.blackout.game.core.Mats;
+import com.blackout.game.effects.*;
+import com.blackout.game.entities.*;
+import com.blackout.game.environment.*;
+
+import static com.blackout.game.core.Constants.*;
+import static com.blackout.game.core.Gfx.*;
+import static com.blackout.game.entities.RigFactory.*;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -66,13 +76,10 @@ public class Main extends javafx.application.Application {
     private static final int TREE_COUNT = 220;
     private static final double VIEW_BUILD = 1300;          // draw distance for buildings / cars
     private static final double VIEW_SMALL = 900;           // draw distance for trees / small props
-    private static final double GROUND_Y = 110;
     private static final double WORLD_BOUNDARY = 1480;
     private static final double WALL_T = 6;
     private static final double DOOR_W = 50;
     private static final double CELL = 160;
-    private static final double TANK_Y = 2.5;               // tank height scale
-    private static final double TANK_XZ = 3.0;              // tank width scale
     private static final double JUMP_FORCE = 380;
     private static final double GRAVITY = 950;
     private static final double WALK_SPEED = 190;
@@ -83,11 +90,6 @@ public class Main extends javafx.application.Application {
     private static final double GUN_X = 8, GUN_Y = -11, GUN_Z = 40;
     private static final double LAKE_X = -880, LAKE_Z = -330, LAKE_RX = 250, LAKE_RZ = 170;
     private static final double RIVER_Z = -900;
-    private static final Random RNG = new Random();
-
-    private static final int Z_WALKER = 0, Z_RUNNER = 1, Z_TANK = 2, Z_SMOKER = 3;
-    private static final int S_IDLE = 0, S_WANDER = 1, S_CHASE = 2;
-
     // ===================== PLAYER STATE =====================
     private Group player, weaponModel, muzzleFlash;
     private Rig playerRig;
@@ -121,28 +123,6 @@ public class Main extends javafx.application.Application {
     private Cylinder playerShadow;
     private Text dateText, clockText, periodText, promptText, sleepText;
     private Region bloodTint, sleepOverlay;
-
-    private enum WeaponType {
-        PISTOL("PISTOL", 12, 48, 52, 1200, 250_000_000L, 1, 0.4),
-        ASSAULT_RIFLE("ASSAULT RIFLE", 30, 120, 30, 1200, 95_000_000L, 1, 1.0),
-        SHOTGUN("SHOTGUN", 6, 36, 20, 550, 750_000_000L, 8, 6.5);
-
-        final String displayName;
-        final int magazineSize, startingReserve, pellets;
-        final double damage, range, spread;
-        final long cooldown;
-
-        WeaponType(String n, int mag, int res, double dmg, double range, long cd, int pellets, double spread) {
-            this.displayName = n;
-            this.magazineSize = mag;
-            this.startingReserve = res;
-            this.damage = dmg;
-            this.range = range;
-            this.cooldown = cd;
-            this.pellets = pellets;
-            this.spread = spread;
-        }
-    }
 
     private WeaponType currentWeapon = WeaponType.PISTOL;
     private final EnumMap<WeaponType, Integer> magazineAmmo = new EnumMap<>(WeaponType.class);
@@ -210,13 +190,13 @@ public class Main extends javafx.application.Application {
     private final List<double[]> moteVel = new ArrayList<>();
     private final List<Cull> culls = new ArrayList<>();
     private final List<double[]> roadRects = new ArrayList<>();
+    private final List<TreeFactory.Tree> trees = new ArrayList<>();
+    private final List<VegetationFactory.Chunk> grassChunks = new ArrayList<>();
 
     // materials
     private PhongMaterial bloodMat, sparkMat, brassMat, dustMat, emberMat, tracerMat, moteMat, smokeMat, matConcrete, matWood,
             matBurlap, matRust, matMetalDark, matGlassDark, matGlassLit, matAsphalt, pine1, pine2, trunkMat, rockMat, snowMat,
             waterMat, sandMat, floorMat, couchMat, bedMat;
-    private static final Map<Color, PhongMaterial> GLOW_CACHE = new HashMap<>();
-
     // ===================== UI =====================
     private ProgressBar healthBar, staminaBar;
     private Text healthText, staminaText, enemyText, statusText, ammoText, killsText, threatText, timeText, weaponText,
@@ -393,30 +373,6 @@ public class Main extends javafx.application.Application {
     }
 
     // ===================== BUILD HELPERS =====================
-    private static PhongMaterial mat(Color d, Color s, double p) {
-        PhongMaterial m = new PhongMaterial();
-        m.setDiffuseColor(d);
-        m.setSpecularColor(s);
-        m.setSpecularPower(p);
-        return m;
-    }
-
-    private static PhongMaterial glow(Color c) {
-        return GLOW_CACHE.computeIfAbsent(c, col -> {
-            PhongMaterial m = new PhongMaterial(Color.BLACK);
-            WritableImage img = new WritableImage(2, 2);
-            PixelWriter pw = img.getPixelWriter();
-            for (int y = 0; y < 2; y++) {
-                for (int x = 0; x < 2; x++) {
-                    pw.setColor(x, y, col);
-                }
-            }
-            m.setSelfIlluminationMap(img);
-            m.setSpecularColor(Color.BLACK);
-            return m;
-        });
-    }
-
     private static PhongMaterial texMat(Image img, Color spec, double power) {
         PhongMaterial m = new PhongMaterial(Color.WHITE);
         m.setDiffuseMap(img);
@@ -469,50 +425,6 @@ public class Main extends javafx.application.Application {
             }
         }
         return img;
-    }
-
-    private static Box box(double w, double h, double d, PhongMaterial m, double x, double y, double z) {
-        Box b = new Box(w, h, d);
-        b.setMaterial(m);
-        b.setTranslateX(x);
-        b.setTranslateY(y);
-        b.setTranslateZ(z);
-        return b;
-    }
-
-    private static Cylinder cylY(double r, double len, PhongMaterial m, double x, double y, double z) {
-        Cylinder c = new Cylinder(r, len);
-        c.setMaterial(m);
-        c.setTranslateX(x);
-        c.setTranslateY(y);
-        c.setTranslateZ(z);
-        return c;
-    }
-
-    private static Cylinder cyl(double r, double len, PhongMaterial m, double x, double y, double z) {
-        Cylinder c = cylY(r, len, m, x, y, z);
-        c.setRotationAxis(Rotate.X_AXIS);
-        c.setRotate(90);
-        return c;
-    }
-
-    private static Cylinder cylX(double r, double len, PhongMaterial m, double x, double y, double z) {
-        Cylinder c = cylY(r, len, m, x, y, z);
-        c.setRotationAxis(Rotate.Z_AXIS);
-        c.setRotate(90);
-        return c;
-    }
-
-    private static Sphere sph(double r, PhongMaterial m, double x, double y, double z, double sx, double sy, double sz) {
-        Sphere s = new Sphere(r, 20);
-        s.setMaterial(m);
-        s.setTranslateX(x);
-        s.setTranslateY(y);
-        s.setTranslateZ(z);
-        s.setScaleX(sx);
-        s.setScaleY(sy);
-        s.setScaleZ(sz);
-        return s;
     }
 
     private static TriangleMesh makeCone(int sides) {
@@ -588,8 +500,6 @@ public class Main extends javafx.application.Application {
     private static final double TIME_SCALE = 2.0;   // game minutes per real second (1 day = 12 real minutes)
     private static final String[] MONTHS = {"JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST",
         "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"};
-    private static final PhongMaterial SHADOW_MAT = mat(Color.rgb(0, 0, 0, 0.4), Color.BLACK, 1);
-
     private static boolean leap(int y) {
         return y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
     }
@@ -1060,10 +970,11 @@ public class Main extends javafx.application.Application {
         voidMat = mat(Color.rgb(9, 12, 12), Color.BLACK, 1);
         voidPlane.setMaterial(voidMat);
         w.getChildren().add(voidPlane);
-        PhongMaterial groundMat = texMat(noiseTexture(512, Color.rgb(46, 52, 40), 0.5, 0.035, Color.rgb(96, 84, 60), 0), Color.rgb(25, 30, 25), 8);
+        // tiled grass (three texture variants so the ground does not look uniform)
+        PhongMaterial[] grass = {Mats.GRASS_A, Mats.GRASS_B, Mats.GRASS_C};
         for (int i = 0; i < 6; i++) {
             for (int j = 0; j < 6; j++) {
-                w.getChildren().add(box(600, 20, 600, groundMat, -1500 + i * 600, 120, -1500 + j * 600));
+                w.getChildren().add(Gfx.plane(-1500 + i * 600, -1500 + j * 600, 600, 600, 60, GROUND_Y - 0.1, grass[(i * 3 + j * 5 + (i ^ j)) % 3]));
             }
         }
         addRoad(0, 0, 160, 3300);
@@ -1092,10 +1003,14 @@ public class Main extends javafx.application.Application {
         createCars();
         createStreetLights();
         createRuins();
+        createRadioTowers();
+        createGrass();
+        createDebris();
     }
 
     private void addRoad(double cx, double cz, double w, double d) {
-        world.getChildren().add(box(w, 3, d, matAsphalt, cx, 108, cz));
+        world.getChildren().add(box(w, 3, d, matAsphalt, cx, 108.5, cz));
+        world.getChildren().add(Gfx.plane(cx, cz, w, d, 64, 106.5, Mats.ASPHALT));
         roadRects.add(new double[]{cx, cz, w, d});
     }
 
@@ -1106,14 +1021,11 @@ public class Main extends javafx.application.Application {
             addObs((s[0] + s[1]) / 2, RIVER_Z, s[1] - s[0], 100, 1500, false);
         }
         for (double sx : new double[]{-93, 93}) {
-            world.getChildren().add(box(3, 10, 112, matMetalDark, sx, 101, RIVER_Z));
             addObs(sx, RIVER_Z, 3, 112, 20, false);
         }
-        for (double pz : new double[]{-30, 30}) {
-            for (double sx : new double[]{-70, 0, 70}) {
-                world.getChildren().add(cylY(6, 40, matConcrete, sx, 120, RIVER_Z + pz));
-            }
-        }
+        Group bridge = BridgeFactory.build(0, RIVER_Z, 190, 112, GROUND_Y, 105.5, true, RNG);
+        world.getChildren().add(bridge);
+        registerCull(bridge, 0, RIVER_Z, 1500);
         world.getChildren().add(box(40, 3, 112, matWood, 700, 107, RIVER_Z));
         for (double sx : new double[]{680, 720}) {
             world.getChildren().add(box(2, 8, 112, matWood, sx, 102, RIVER_Z));
@@ -1121,10 +1033,10 @@ public class Main extends javafx.application.Application {
     }
 
     private void createLake() {
-        Cylinder sand = cylY(1, 1, sandMat, LAKE_X, 109.8, LAKE_Z);
+        Cylinder sand = cylY(1, 1, sandMat, LAKE_X, 109.8, LAKE_Z, 64);
         sand.setScaleX(LAKE_RX + 18);
         sand.setScaleZ(LAKE_RZ + 18);
-        Cylinder water = cylY(1, 1, waterMat, LAKE_X, 109.4, LAKE_Z);
+        Cylinder water = cylY(1, 1, waterMat, LAKE_X, 109.4, LAKE_Z, 64);
         water.setScaleX(LAKE_RX);
         water.setScaleZ(LAKE_RZ);
         world.getChildren().addAll(sand, water);
@@ -1371,6 +1283,9 @@ public class Main extends javafx.application.Application {
             }
         }
         b.group.getChildren().add(b.roof);
+        if (!flat) {
+            addHouseDetails(b, bx, bz, fz, w, d, h, front, rise);
+        }
         addFurniture(b);
         for (int i = 0; i < 2; i++) {
             for (int a = 0; a < 8; a++) {
@@ -1392,6 +1307,30 @@ public class Main extends javafx.application.Application {
             addFire(bx + w / 5, GROUND_Y - h - rise * 0.4, bz + 6, 1.9, true);
         }
         return b;
+    }
+
+    /** Porch, shutters / boarded windows, gutters and chimney from BuildingDetail. */
+    private void addHouseDetails(Building b, double bx, double bz, double fz, double w, double d, double h, int front, double rise) {
+        boolean ruined = b.burning;
+        if (!ruined && RNG.nextDouble() < 0.7) {
+            BuildingDetail.porch(b.group, bx, fz, front, h, GROUND_Y + 8, RNG);
+        }
+        if (w >= 160) {
+            for (int sx = -1; sx <= 1; sx += 2) {
+                double wx = bx + sx * (w / 2 - 34);
+                if (ruined || RNG.nextDouble() < 0.3) {
+                    BuildingDetail.boards(b.group, wx, GROUND_Y - 53, fz + 4 * front - 3.5, true, 26, 30, RNG);
+                } else {
+                    BuildingDetail.shutters(b.group, wx, GROUND_Y - 53, fz + 4 * front - 4, true, 26, 30, RNG);
+                }
+            }
+        }
+        for (int s = -1; s <= 1; s += 2) {
+            BuildingDetail.gutter(b.roof, bx, bz + s * (d / 2 + 5), w, GROUND_Y - h + 1);
+        }
+        if (RNG.nextDouble() < 0.65) {
+            BuildingDetail.chimney(b.roof, bx + w * 0.25, bz + d / 6, GROUND_Y - h - rise * 0.67);
+        }
     }
 
     private void buildWall(Building b, double cx, double cz, double len, boolean alongX, double h, double[][] ops, PhongMaterial wall) {
@@ -1538,28 +1477,117 @@ public class Main extends javafx.application.Application {
             if (!ok || blocked(x, z, 28, 0, false)) {
                 continue;
             }
-            addPine(x, z, 0.8 + RNG.nextDouble() * 0.9);
+            addTree(x, z, 0.8 + RNG.nextDouble() * 0.9);
             placed++;
         }
     }
 
-    private void addPine(double x, double z, double s) {
-        Group g = new Group();
-        g.getChildren().add(cylY(4 * s, 40 * s, trunkMat, x, GROUND_Y - 20 * s, z));
-        double[][] layers = {{30, 46, 26}, {22, 40, 54}, {14, 34, 78}};
-        for (int i = 0; i < layers.length; i++) {
-            MeshView mv = new MeshView(CONE8);
-            mv.setMaterial(i % 2 == 0 ? pine1 : pine2);
-            mv.setCullFace(CullFace.NONE);
-            mv.getTransforms().add(new Scale(layers[i][0] * s, layers[i][1] * s, layers[i][0] * s));
-            mv.setTranslateX(x);
-            mv.setTranslateY(GROUND_Y - layers[i][2] * s + 20 * s);
-            mv.setTranslateZ(z);
-            g.getChildren().add(mv);
-        }
-        world.getChildren().add(g);
-        registerCull(g, x, z, VIEW_SMALL);
+    private void addTree(double x, double z, double s) {
+        double r = RNG.nextDouble();
+        int species = r < 0.45 ? TreeFactory.PINE : r < 0.7 ? TreeFactory.OAK : r < 0.85 ? TreeFactory.BIRCH : TreeFactory.DEAD;
+        TreeFactory.Tree t = TreeFactory.create(species, s, x, z, GROUND_Y, RNG);
+        trees.add(t);
+        world.getChildren().add(t.node);
+        registerCull(t.node, x, z, VIEW_SMALL);
         addObs(x, z, 10 * s, 10 * s, 60, false);
+    }
+
+    /** Radio / cellular towers and a line of high-voltage pylons (all from TowerFactory). */
+    private void createRadioTowers() {
+        int placed = 0;
+        for (int t = 0; t < 600 && placed < 3; t++) {
+            double x = (RNG.nextDouble() - 0.5) * 2600, z = (RNG.nextDouble() - 0.5) * 2600;
+            if ((Math.abs(x) < 700 && Math.abs(z) < 900) || onRoad(x, z, 120) || inLake(x, z, 100) || Math.abs(z - RIVER_Z) < 150
+                    || blocked(x, z, 80, 0, false)) {
+                continue;
+            }
+            boolean near = false;
+            for (Building b : buildings) {
+                if (dist(x, z, b.x, b.z) < 200) {
+                    near = true;
+                    break;
+                }
+            }
+            if (near) {
+                continue;
+            }
+            Group tw = placed == 2 ? TowerFactory.monopole(300, false, beacons, RNG) : TowerFactory.lattice(placed == 0 ? 380 : 320, placed == 1, beacons, RNG);
+            tw.setTranslateX(x);
+            tw.setTranslateY(GROUND_Y);
+            tw.setTranslateZ(z);
+            world.getChildren().add(tw);
+            registerCull(tw, x, z, 2200);
+            addObs(x, z, 64, 64, 60, false);
+            placed++;
+        }
+        // pylon line running north-south
+        final double h = 150, px = 1300;
+        double lastZ = Double.NaN;
+        PhongMaterial wire = Mats.BLACK_METAL;
+        for (double z = -700; z <= 1300; z += 400) {
+            if (onRoad(px, z, 60) || blocked(px, z, 40, 0, false) || buildingAt(px, z) != null) {
+                lastZ = Double.NaN;
+                continue;
+            }
+            Group py = TowerFactory.pylon(h, RNG);
+            py.setTranslateX(px);
+            py.setTranslateY(GROUND_Y);
+            py.setTranslateZ(z);
+            py.setRotationAxis(Rotate.Y_AXIS);
+            py.setRotate(0);
+            world.getChildren().add(py);
+            registerCull(py, px, z, 2000);
+            addObs(px, z, 36, 36, 60, false);
+            if (!Double.isNaN(lastZ)) {
+                Group wires = new Group();
+                for (int i = 0; i < 3; i++) {
+                    double y = GROUND_Y - h * (0.62 + i * 0.11) + 5, arm = h * (0.26 - i * 0.04);
+                    for (int sx = -1; sx <= 1; sx += 2) {
+                        Gfx.cable(wires, px + sx * arm, y, lastZ, px + sx * arm, y, z, 9, 0.9, wire);
+                    }
+                }
+                world.getChildren().add(wires);
+                registerCull(wires, px, (z + lastZ) / 2, 1800);
+            }
+            lastZ = z;
+        }
+    }
+
+    /** Swaying grass patches and bushes spread over the whole map (culled by distance). */
+    private void createGrass() {
+        final double size = 200;
+        for (double cx = -1700 + size / 2; cx < 1700; cx += size) {
+            for (double cz = -1700 + size / 2; cz < 1700; cz += size) {
+                boolean wild = Math.hypot(cx, cz) > 900;
+                VegetationFactory.Chunk c = VegetationFactory.grassChunk(cx, cz, size, GROUND_Y, RNG,
+                        (x, z) -> !onRoad(x, z, 14) && !inLake(x, z, 20) && Math.abs(z - RIVER_Z) > 60 && buildingAt(x, z) == null
+                        && !blocked(x, z, 6, 0, false), 9, 1, wild);
+                if (c.node.getChildren().isEmpty()) {
+                    continue;
+                }
+                grassChunks.add(c);
+                world.getChildren().add(c.node);
+                registerCull(c.node, cx, cz, 650);
+            }
+        }
+    }
+
+    /** Rocks, logs, trash piles, tyres, barrels, scrap and paper scattered around. */
+    private void createDebris() {
+        for (int i = 0, placed = 0; i < 400 && placed < 90; i++) {
+            double x = (RNG.nextDouble() - 0.5) * 3200, z = (RNG.nextDouble() - 0.5) * 3200;
+            if (inLake(x, z, 30) || Math.abs(z - RIVER_Z) < 70 || buildingAt(x, z) != null || blocked(x, z, 12, 0, false)) {
+                continue;
+            }
+            Group d = VegetationFactory.debris(RNG.nextInt(8), RNG, GROUND_Y);
+            d.setTranslateX(x);
+            d.setTranslateZ(z);
+            d.setRotationAxis(Rotate.Y_AXIS);
+            d.setRotate(RNG.nextDouble() * 360);
+            world.getChildren().add(d);
+            registerCull(d, x, z, VIEW_SMALL);
+            placed++;
+        }
     }
 
     // ===================== CARS / LIGHTS / RUINS =====================
@@ -1596,24 +1624,19 @@ public class Main extends javafx.application.Application {
 
     private void addCarInternal(double x, double z, double jitter, boolean turned, boolean wreck) {
         Color[] cc = {Color.rgb(140, 40, 36), Color.rgb(40, 70, 120), Color.rgb(170, 170, 160), Color.rgb(36, 40, 44), Color.rgb(90, 110, 60), Color.rgb(190, 150, 40)};
-        PhongMaterial body = wreck ? matRust : mat(cc[RNG.nextInt(cc.length)], Color.rgb(150, 150, 150), 60);
-        PhongMaterial tire = mat(Color.rgb(14, 14, 15), Color.rgb(40, 40, 40), 10);
-        Group g = new Group();
+        int kind = RNG.nextInt(4);
+        boolean burnt = wreck && RNG.nextDouble() < 0.35;
+        double len = kind == VehicleFactory.PICKUP ? 132 : kind == VehicleFactory.VAN ? 136 : kind == VehicleFactory.SUV ? 124 : 118;
+        Group g = VehicleFactory.create(kind, cc[RNG.nextInt(cc.length)], wreck, burnt, RNG);
         g.setTranslateX(x);
         g.setTranslateY(GROUND_Y);
         g.setTranslateZ(z);
         double base = (turned ? 90 : 0) + jitter;
         Rotate rot = new Rotate(base, Rotate.Y_AXIS);
         g.getTransforms().add(rot);
-        g.getChildren().addAll(
-                box(56, 18, 118, body, 0, -17, 0), box(50, 16, 58, body, 0, -33, -6),
-                box(44, 11, 1, matGlassDark, 0, -33, 23.6), box(44, 11, 1, matGlassDark, 0, -33, -35.6),
-                box(8, 5, 2, glow(wreck ? Color.rgb(120, 20, 18) : Color.rgb(255, 230, 190)), -18, -22, 59.5),
-                box(8, 5, 2, glow(wreck ? Color.rgb(120, 20, 18) : Color.rgb(255, 230, 190)), 18, -22, 59.5),
-                cylX(10, 8, tire, -29, -9, 38), cylX(10, 8, tire, 29, -9, 38), cylX(10, 8, tire, -29, -9, -38), cylX(10, 8, tire, 29, -9, -38));
         world.getChildren().add(g);
         registerCull(g, x, z, VIEW_BUILD);
-        addObs(x, z, turned ? 124 : 66, turned ? 66 : 124, 38, false);
+        addObs(x, z, turned ? len : 66, turned ? 66 : len, 38, false);
         Car c = new Car();
         c.x = x;
         c.z = z;
@@ -1692,143 +1715,6 @@ public class Main extends javafx.application.Application {
     // ===================== RIG / CHARACTER MODELS =====================
     private Building insideB;
 
-    private static class Rig {
-
-        final Group root = new Group(), upper = new Group(), headGroup = new Group(), jawGroup = new Group();
-        final Rotate lean = new Rotate(0, 0, 12, 0, Rotate.X_AXIS);
-        final Rotate twist = new Rotate(0, 0, 12, 0, Rotate.Z_AXIS);
-        final Rotate lHipR = new Rotate(0, Rotate.X_AXIS), rHipR = new Rotate(0, Rotate.X_AXIS);
-        final Rotate lKneeR = new Rotate(0, Rotate.X_AXIS), rKneeR = new Rotate(0, Rotate.X_AXIS);
-        final Rotate lShR = new Rotate(0, Rotate.X_AXIS), rShR = new Rotate(0, Rotate.X_AXIS);
-        final Rotate lElbR = new Rotate(0, Rotate.X_AXIS), rElbR = new Rotate(0, Rotate.X_AXIS);
-        final Rotate lShYaw = new Rotate(0, Rotate.Y_AXIS), rShYaw = new Rotate(0, Rotate.Y_AXIS);
-        final Rotate headX = new Rotate(0, 0, -31, 0, Rotate.X_AXIS);
-        final Rotate headZ = new Rotate(0, 0, -31, 0, Rotate.Z_AXIS);
-        final Rotate jaw = new Rotate(0, 0, -40, 6, Rotate.X_AXIS);
-        Sphere sack;
-
-        Rig() {
-            upper.getTransforms().addAll(twist, lean);
-            headGroup.getTransforms().addAll(headZ, headX);
-            jawGroup.getTransforms().add(jaw);
-        }
-    }
-
-    private static Group limb(Rotate yaw, Rotate pitch, Rotate bend, double x, double y, double w, double d, double upperLen,
-            double lowerLen, PhongMaterial mUp, PhongMaterial mLow, PhongMaterial mEnd, double endH, double endD, double endZ) {
-        Group g = new Group();
-        g.setTranslateX(x);
-        g.setTranslateY(y);
-        if (yaw != null) {
-            g.getTransforms().add(yaw);
-        }
-        g.getTransforms().add(pitch);
-        g.getChildren().add(box(w, upperLen, d, mUp, 0, upperLen / 2, 0));
-        Group low = new Group();
-        low.setTranslateY(upperLen);
-        low.getTransforms().add(bend);
-        low.getChildren().addAll(sph(w * 0.5, mUp, 0, 0, 0, 1, 1, 1), box(w * 0.88, lowerLen, d * 0.9, mLow, 0, lowerLen / 2, 0),
-                box(w * 0.95, endH, endD, mEnd, 0, lowerLen - endH / 2 + 1, endZ));
-        g.getChildren().add(low);
-        return g;
-    }
-
-    private static Rig buildSoldier() {
-        Rig r = new Rig();
-        PhongMaterial cloth = mat(Color.rgb(52, 64, 56), Color.rgb(50, 60, 55), 8);
-        PhongMaterial pants = mat(Color.rgb(44, 52, 48), Color.rgb(40, 48, 44), 8);
-        PhongMaterial vest = mat(Color.rgb(30, 34, 37), Color.rgb(90, 98, 105), 28);
-        PhongMaterial pad = mat(Color.rgb(22, 24, 26), Color.rgb(110, 115, 120), 40);
-        PhongMaterial glove = mat(Color.rgb(16, 17, 19), Color.rgb(70, 70, 75), 30);
-        PhongMaterial boot = mat(Color.rgb(24, 21, 18), Color.rgb(80, 75, 70), 40);
-        PhongMaterial mask = mat(Color.rgb(26, 28, 30), Color.rgb(50, 50, 55), 10);
-        PhongMaterial helmet = mat(Color.rgb(58, 70, 56), Color.rgb(150, 160, 145), 52);
-        PhongMaterial lens = glow(Color.rgb(70, 210, 255));
-        PhongMaterial accent = glow(Color.rgb(255, 150, 30));
-        r.upper.getChildren().addAll(
-                box(36, 40, 21, cloth, 0, -9, 0), box(38, 30, 24, vest, 0, -11, 0.5), box(26, 22, 3, pad, 0, -13, 13),
-                box(7, 2, 0.6, accent, 0, -21, 14.7), box(8, 8, 5, pad, -11, 2, 12), box(8, 8, 5, pad, 11, 2, 12),
-                box(38, 4, 23, pad, 0, 4, 0), box(28, 34, 13, pad, 0, -12, -17), cylX(6, 28, cloth, 0, -32, -18),
-                box(10, 6, 10, mask, 0, -31, 0), sph(8.5, pad, -25, -27, 0, 1, 0.8, 1), sph(8.5, pad, 25, -27, 0, 1, 0.8, 1));
-        r.headGroup.getChildren().addAll(
-                box(21, 24, 21, mask, 0, -45, 0), box(19.5, 5, 2.5, lens, 0, -45, 10.8),
-                sph(13, helmet, 0, -52, -0.5, 1.12, 0.85, 1.18), box(3, 6, 4, pad, -11.5, -46, 2),
-                box(3, 6, 4, pad, 11.5, -46, 2), box(2, 2, 2, accent, 11.5, -50, 3));
-        r.upper.getChildren().add(r.headGroup);
-        r.upper.getChildren().add(limb(r.lShYaw, r.lShR, r.lElbR, -24, -27, 11, 12, 24, 22, cloth, cloth, glove, 9, 10, 0));
-        r.upper.getChildren().add(limb(r.rShYaw, r.rShR, r.rElbR, 24, -27, 11, 12, 24, 22, cloth, cloth, glove, 9, 10, 0));
-        Group lLeg = limb(null, r.lHipR, r.lKneeR, -9, 12, 15, 17, 22, 20, pants, pants, boot, 9, 22, 4);
-        Group rLeg = limb(null, r.rHipR, r.rKneeR, 9, 12, 15, 17, 22, 20, pants, pants, boot, 9, 22, 4);
-        r.root.getChildren().addAll(box(34, 10, 20, pants, 0, 11, 0), r.upper, lLeg, rLeg);
-        return r;
-    }
-
-    private static Rig buildZombie(int type, boolean bl) {
-        Rig r = new Rig();
-        Color skinC = type == Z_RUNNER ? Color.rgb(138, 150, 112) : type == Z_TANK ? Color.rgb(108, 118, 96)
-                : type == Z_SMOKER ? Color.rgb(112, 128, 116)
-                        : Color.rgb(122 + RNG.nextInt(16), 140 + RNG.nextInt(12), 106 + RNG.nextInt(10));
-        Color[] shirts = {Color.rgb(78, 84, 70), Color.rgb(96, 74, 64), Color.rgb(62, 70, 88), Color.rgb(84, 66, 66), Color.rgb(58, 62, 56)};
-        PhongMaterial skin = bl ? mat(Color.rgb(20, 20, 23), Color.rgb(70, 70, 85), 30) : mat(skinC, Color.rgb(30, 36, 30), 6);
-        PhongMaterial shirt = bl ? mat(Color.rgb(14, 14, 16), Color.rgb(40, 40, 50), 10) : mat(type == Z_TANK ? Color.rgb(50, 52, 50) : shirts[RNG.nextInt(shirts.length)], Color.rgb(25, 25, 25), 4);
-        PhongMaterial pants = bl ? mat(Color.rgb(12, 12, 14), Color.rgb(30, 30, 36), 8) : mat(Color.rgb(46 + RNG.nextInt(14), 44, 42), Color.rgb(20, 20, 20), 4);
-        PhongMaterial blood = mat(Color.rgb(96, 10, 10), Color.rgb(200, 50, 50), 48);
-        PhongMaterial flesh = mat(Color.rgb(130, 45, 52), Color.rgb(200, 110, 110), 30);
-        PhongMaterial dark = mat(Color.rgb(16, 14, 13), Color.rgb(20, 20, 20), 4);
-        PhongMaterial bone = mat(Color.rgb(205, 196, 165), Color.rgb(120, 120, 100), 20);
-        PhongMaterial eye = bl ? glow(Color.rgb(255, 10, 10)) : glow(type == Z_RUNNER ? Color.rgb(255, 40, 30) : type == Z_TANK ? Color.rgb(255, 140, 30)
-                : type == Z_SMOKER ? Color.rgb(190, 90, 255) : Color.rgb(210, 255, 70));
-        Group up = r.upper;
-        up.getChildren().addAll(
-                box(34, 40, 20, shirt, 0, -9, 0), box(11, 7, 21, shirt, -9, 11, 0), box(9, 5, 21, shirt, 10, 10, 0),
-                box(15, 19, 1, blood, -6, -12, 10.4), box(9, 11, 1.2, flesh, -6, -11, 10.6),
-                box(11, 1.4, 1.6, bone, -6, -15, 11.1), box(11, 1.4, 1.6, bone, -6, -11.4, 11.1), box(11, 1.4, 1.6, bone, -6, -7.8, 11.1),
-                box(8, 6, 1, blood, 10, -22, 10.4), box(12, 16, 1, blood, 5, -10, -10.4), box(9, 7, 9, skin, 0, -31, 0),
-                sph(7, shirt, -22, -27, 0, 1, 1, 1), sph(7, shirt, 22, -27, 0, 1, 1, 1));
-        if (type == Z_TANK) {
-            up.getChildren().addAll(sph(10, flesh, 8, -20, -14, 1, 1, 1), sph(6, blood, -12, -30, -8, 1, 1, 1), sph(5, flesh, 14, -32, 4, 1, 1, 1));
-        }
-        if (type == Z_SMOKER) {
-            r.sack = sph(13, mat(Color.rgb(90, 140, 70), Color.rgb(180, 220, 150), 60), 0, -4, 12, 1, 1, 0.8);
-            up.getChildren().addAll(r.sack, sph(4, glow(Color.rgb(120, 255, 90)), 5, -8, 20, 1, 1, 1));
-        }
-        r.headGroup.getChildren().addAll(
-                box(21, 16, 21, skin, 0, -49, 0), box(19, 8, 19, skin, 0, -41, 0),
-                box(5.5, 4.5, 1, dark, -5, -48, 10.4), box(5.5, 4.5, 1, dark, 5, -48, 10.4),
-                box(3.6, 2.8, 0.8, eye, -5, -48, 10.95), box(3.6, 2.8, 0.8, eye, 5, -48, 10.95), box(3, 5, 3, flesh, 0, -44, 11),
-                box(14, 4, 14, dark, -2, -58.5, -2), box(8, 3, 8, dark, 6, -57, 4), box(6, 1, 6, blood, 4, -57.6, 3));
-        for (int i = 0; i < 4; i++) {
-            r.headGroup.getChildren().add(box(3, 3, 1, bone, -4.5 + 3 * i, -38.5, 9.6));
-        }
-        r.jawGroup.getChildren().addAll(box(17, 6, 17, skin, 0, -35.5, 1.5), box(8, 1.5, 8, flesh, 0, -38.5, 2.5),
-                box(2.5, 2.5, 1, bone, -4, -38, 9.4), box(2.5, 2.5, 1, bone, 0, -38, 9.4), box(2.5, 2.5, 1, bone, 4, -38, 9.4));
-        if (type == Z_SMOKER) {
-            r.jawGroup.getChildren().add(sph(3.5, glow(Color.rgb(120, 255, 90)), 0, -38.5, 6, 1, 1, 1));
-        }
-        if (type == Z_RUNNER) {
-            r.jawGroup.getChildren().add(box(15, 2, 1, blood, 0, -34, 10));
-        }
-        if (bl) {
-            r.jawGroup.getChildren().add(box(14, 1.5, 12, glow(Color.rgb(255, 20, 20)), 0, -38.6, 3));
-            r.headGroup.getChildren().addAll(box(2, 7, 2, dark, -7, -60, -2), box(2, 9, 2, dark, 0, -61, -3), box(2, 7, 2, dark, 7, -60, -2),
-                    box(7, 1.2, 1, glow(Color.rgb(255, 10, 10)), -5, -51.5, 10.9), box(7, 1.2, 1, glow(Color.rgb(255, 10, 10)), 5, -51.5, 10.9));
-            up.getChildren().addAll(box(2.5, 10, 2.5, dark, -14, -34, -6), box(2.5, 12, 2.5, dark, 0, -36, -9), box(2.5, 10, 2.5, dark, 14, -34, -6));
-        }
-        r.headGroup.getChildren().add(r.jawGroup);
-        up.getChildren().add(r.headGroup);
-        Group lArm = limb(r.lShYaw, r.lShR, r.lElbR, -23, -27, 10.5, 11, 24, 22, shirt, skin, skin, 8, 9, 0);
-        Group rArm = limb(r.rShYaw, r.rShR, r.rElbR, 23, -27, 10.5, 11, 24, 22, shirt, skin, skin, 8, 9, 0);
-        if (type == Z_TANK) {
-            ((Group) lArm.getChildren().get(1)).getChildren().add(sph(9, skin, 0, 26, 0, 1, 1, 1));
-            ((Group) rArm.getChildren().get(1)).getChildren().add(sph(9, skin, 0, 26, 0, 1, 1, 1));
-        }
-        up.getChildren().addAll(lArm, rArm);
-        Group lLeg = limb(null, r.lHipR, r.lKneeR, -9, 12, 15, 16, 22, 20, pants, pants, dark, 9, 21, 4);
-        Group rLeg = limb(null, r.rHipR, r.rKneeR, 9, 12, 15, 16, 22, 20, pants, blood, dark, 9, 21, 4);
-        r.root.getChildren().addAll(box(32, 10, 19, pants, 0, 11, 0), r.upper, lLeg, rLeg);
-        return r;
-    }
-
     // ===================== PLAYER & WEAPON MODEL =====================
     private void createPlayer(Group w) {
         player = new Group();
@@ -1846,7 +1732,7 @@ public class Main extends javafx.application.Application {
         weaponModel = createWeaponModel();
         playerRig.upper.getChildren().add(weaponModel);
         w.getChildren().add(player);
-        playerShadow = cylY(1, 0.4, SHADOW_MAT, 0, GROUND_Y - 0.3, 0);
+        playerShadow = cylY(1, 0.4, SHADOW_MAT, 0, GROUND_Y - 0.3, 0, 32);
         playerShadow.setScaleX(22);
         playerShadow.setScaleZ(22);
         playerShadow.setMouseTransparent(true);
@@ -3461,6 +3347,16 @@ public class Main extends javafx.application.Application {
             Rotate r = beamRotates.get(i);
             r.setAngle(r.getAngle() + dt * (i % 2 == 0 ? 22 : -22));
         }
+        for (TreeFactory.Tree t : trees) {
+            if (t.node.isVisible()) {
+                t.sway(worldTime);
+            }
+        }
+        for (VegetationFactory.Chunk c : grassChunks) {
+            if (c.node.isVisible()) {
+                c.update(worldTime);
+            }
+        }
         for (Pickup pk : pickups) {
             pk.phase += dt * 3;
             pk.node.setTranslateY(GROUND_Y - 3 - Math.abs(Math.sin(pk.phase)) * 4);
@@ -4027,314 +3923,6 @@ public class Main extends javafx.application.Application {
     }
 
     // ===================== NESTED CLASSES =====================
-    private static class Obstacle {
-
-        final double x, z, halfWidth, halfDepth, top;
-        final boolean zombiePass;
-        boolean active = true;
-
-        Obstacle(double x, double z, double hw, double hd, double top, boolean zp) {
-            this.x = x;
-            this.z = z;
-            this.halfWidth = hw;
-            this.halfDepth = hd;
-            this.top = top;
-            this.zombiePass = zp;
-        }
-    }
-
-    private static class Building {
-
-        final double x, z, w, d, h;
-        final int front;
-        boolean burning, doorOpen;
-        double doorAmt, doorX, doorZ, outX, outZ, inX, inZ;
-        final Group group = new Group(), roof = new Group();
-        Rotate doorRot;
-        Obstacle doorObs;
-        final List<double[]> spawn = new ArrayList<>();
-
-        Building(double x, double z, double w, double d, double h, int front) {
-            this.x = x;
-            this.z = z;
-            this.w = w;
-            this.d = d;
-            this.h = h;
-            this.front = front;
-        }
-
-        boolean contains(double px, double pz) {
-            return Math.abs(px - x) < w / 2 && Math.abs(pz - z) < d / 2;
-        }
-    }
-
-    private static class Car {
-
-        double x, z, baseYaw;
-        boolean turned;
-        Group g;
-        Rotate rot;
-    }
-
-    private static class Cull {
-
-        Node node;
-        double x, z, view;
-    }
-
-    private static class DynLight {
-
-        final PointLight light;
-        final double x, z, phase = RNG.nextDouble() * 6.28;
-        final int kind;
-        final Color base;
-        boolean on;
-
-        DynLight(PointLight l, double x, double z, int kind, Color base) {
-            this.light = l;
-            this.x = x;
-            this.z = z;
-            this.kind = kind;
-            this.base = base;
-        }
-    }
-
-    private static class Fire {
-
-        final Group flames = new Group();
-        final Box[] tongues = new Box[3];
-        final double[] heights = {16, 11, 8};
-        final double x, y, z, scale;
-        final boolean smoke;
-        DynLight dl;
-        double phase = RNG.nextDouble() * 6, emberT;
-
-        Fire(double x, double y, double z, double scale, boolean smoke) {
-            this.x = x;
-            this.y = y;
-            this.z = z;
-            this.scale = scale;
-            this.smoke = smoke;
-            flames.setTranslateX(x);
-            flames.setTranslateY(y);
-            flames.setTranslateZ(z);
-            flames.getTransforms().add(new Scale(scale, scale, scale));
-            PhongMaterial[] fm = {glow(Color.rgb(255, 90, 20)), glow(Color.rgb(255, 170, 40)), glow(Color.rgb(255, 235, 140))};
-            double[] widths = {13, 9, 5};
-            for (int i = 0; i < 3; i++) {
-                tongues[i] = new Box(widths[i], heights[i], widths[i]);
-                tongues[i].setMaterial(fm[i]);
-                tongues[i].setTranslateY(-heights[i] / 2);
-                flames.getChildren().add(tongues[i]);
-            }
-        }
-    }
-
-    private static class Pickup {
-
-        Group node;
-        int kind;
-        double x, z, phase;
-    }
-
-    private static class Grenade {
-
-        Sphere node;
-        double x, y, z, vx, vy, vz, fuse;
-    }
-
-    private static class Explosion {
-
-        Sphere node;
-        double t;
-    }
-
-    private static class SmokeCloud {
-
-        double x, z, r, life, emit;
-    }
-
-    private static class Particle {
-
-        Box node;
-        double vx, vy, vz, life, maxLife, fade, gravity, grow;
-        boolean bounce, blood, moving, flat;
-    }
-
-    private static class Tracer {
-
-        Box node;
-        double life;
-    }
-
-    private static class Enemy {
-
-        final Group model = new Group(), inner;
-        final Rotate facing = new Rotate(0, Rotate.Y_AXIS);
-        final Rotate fall = new Rotate(0, Rotate.X_AXIS);
-        final Scale scaleT;
-        final Cylinder shadow;
-        final Rig origRig;
-        Rig rig, bloodRig;
-        final int origType;
-        int type;
-        double sx, sy, speedMul, reach, radius, detect, windupDur, staggerMul, maxHealth;
-        final double limp, phaseOff, jit, wSpd;
-        boolean alive = true, stepFlag, blood;
-        double health, attackCd = 0.5, windup = -1, animationTime, walkPhase, spawnTimer, stagger, deathTime, yaw, alert, lostTimer,
-                idleTimer, wanderT, wx, wz, slamT, castCd = 2, stuck, sideT, sideDir = 1, hiddenTimer, deathDir = 1, puffT;
-        int state = S_IDLE, exitStage, enterStage;
-        Car car;
-
-        Enemy(double x, double z, int type) {
-            this.origType = type;
-            jit = 0.97 + RNG.nextDouble() * 0.1;
-            wSpd = 0.85 + RNG.nextDouble() * 0.3;
-            limp = 0.4 + RNG.nextDouble() * 0.5;
-            phaseOff = RNG.nextDouble() * 6.28;
-            applyStats(type, false);
-            health = maxHealth;
-            origRig = buildZombie(type, false);
-            rig = origRig;
-            inner = new Group(rig.root);
-            inner.setTranslateY(-55);
-            shadow = cylY(1, 0.4, SHADOW_MAT, 0, -0.3, 0);
-            shadow.setScaleX(22);
-            shadow.setScaleZ(22);
-            scaleT = new Scale(sx, sy, sx);
-            model.getChildren().addAll(shadow, inner);
-            model.getTransforms().addAll(facing, fall, scaleT);
-            model.setTranslateX(x);
-            model.setTranslateY(GROUND_Y + 62);
-            model.setTranslateZ(z);
-            yaw = RNG.nextDouble() * 360;
-            facing.setAngle(yaw);
-        }
-
-        void applyStats(int t, boolean bl) {
-            type = t;
-            if (bl) {
-                sy = 1.0;
-                sx = 0.92;
-                maxHealth = 90;
-                speedMul = 2.8;
-                reach = 52;
-                radius = 17;
-                detect = 900;
-                windupDur = 0.28;
-                staggerMul = 0.5;
-                return;
-            }
-            sy = t == Z_TANK ? TANK_Y : t == Z_RUNNER ? 0.98 : t == Z_SMOKER ? 1.05 : jit;
-            sx = t == Z_TANK ? TANK_XZ : t == Z_RUNNER ? 0.9 : t == Z_SMOKER ? 1.0 : jit;
-            maxHealth = t == Z_TANK ? 900 : t == Z_RUNNER ? 60 : t == Z_SMOKER ? 140 : 100;
-            speedMul = t == Z_RUNNER ? 2.1 : t == Z_TANK ? 0.42 : t == Z_SMOKER ? 0.8 : wSpd;
-            reach = t == Z_TANK ? 108 : t == Z_RUNNER ? 50 : 52;
-            radius = Math.min(18 * sx, 30);
-            detect = t == Z_RUNNER ? 460 : t == Z_SMOKER ? 440 : t == Z_TANK ? 360 : 380;
-            windupDur = t == Z_RUNNER ? 0.32 : t == Z_TANK ? 0.95 : t == Z_SMOKER ? 1.1 : 0.45;
-            staggerMul = t == Z_TANK ? 0.15 : 1;
-        }
-
-        /**
-         * Blood Moon transformation: any zombie becomes a black, red-eyed, fast
-         * Runner; reverts when the event ends.
-         */
-        void setBlood(boolean on) {
-            if (!alive || on == blood) {
-                return;
-            }
-            double frac = Math.max(0.05, health / maxHealth);
-            blood = on;
-            if (on) {
-                applyStats(Z_RUNNER, true);
-                if (bloodRig == null) {
-                    bloodRig = buildZombie(Z_RUNNER, true);
-                }
-                rig = bloodRig;
-                state = S_CHASE;
-                lostTimer = 9999;
-            } else {
-                applyStats(origType, false);
-                rig = origRig;
-                state = S_IDLE;
-                idleTimer = 1 + RNG.nextDouble() * 3;
-                lostTimer = 0;
-                alert = 0;
-            }
-            health = Math.max(1, frac * maxHealth);
-            inner.getChildren().setAll(rig.root);
-            scaleT.setX(sx);
-            scaleT.setY(sy);
-            scaleT.setZ(sx);
-            windup = -1;
-            stagger = 0;
-            slamT = 0;
-            castCd = 2;
-        }
-
-        void animate(double dt, boolean moving, boolean chasing) {
-            animationTime += dt;
-            double sp = (type == Z_RUNNER ? 12 : type == Z_TANK ? 4.2 : type == Z_SMOKER ? 6 : 7.5) * (chasing ? 1 : 0.55);
-            if (moving) {
-                walkPhase += dt * sp;
-            }
-            double p = walkPhase + phaseOff, t = animationTime + phaseOff;
-            double amp = type == Z_RUNNER ? 40 : type == Z_TANK ? 20 : 24, blend = moving ? 1 : 0.2;
-            rig.lHipR.setAngle(Math.sin(p) * amp * blend);
-            rig.rHipR.setAngle(-Math.sin(p) * amp * limp * blend);
-            rig.lKneeR.setAngle(-Math.max(0, Math.cos(p)) * 35 * blend);
-            rig.rKneeR.setAngle(-Math.max(0, -Math.cos(p)) * 20 * limp * blend);
-            double wp = windup > 0 && windupDur > 0 ? 1 - windup / windupDur : 0;
-            double ls, rs, le, re, lean = type == Z_RUNNER ? -26 : type == Z_TANK ? -8 : -14;
-            if (!chasing) {
-                ls = 18 + Math.sin(t * 1.3) * 4;
-                rs = 22 + Math.sin(t * 1.1) * 4;
-                le = 12;
-                re = 14;
-                lean = -8;
-            } else if (type == Z_RUNNER && moving && wp == 0) {
-                ls = 55 - Math.sin(p) * 40;
-                rs = 55 + Math.sin(p) * 40;
-                le = 50;
-                re = 50;
-            } else if (type == Z_TANK) {
-                ls = rs = slamT > 0 ? 20 + 150 * (slamT / 0.25) : 70 + 100 * wp;
-                le = re = 10;
-                lean -= 12 * wp;
-            } else if (type == Z_SMOKER) {
-                ls = 60 + Math.sin(t * 1.7) * 5 - 20 * wp;
-                rs = 64 + Math.sin(t * 1.4) * 5 - 20 * wp;
-                le = 14;
-                re = 18;
-            } else {
-                ls = 78 + Math.sin(t * 1.7) * 7 + 40 * wp;
-                rs = 84 + Math.sin(t * 1.4) * 8 + 40 * wp;
-                le = 14 + Math.sin(t * 2.1) * 6;
-                re = 22 + Math.sin(t * 1.9) * 6;
-                lean -= (type == Z_RUNNER ? 16 : 8) * wp;
-            }
-            rig.lShR.setAngle(ls);
-            rig.rShR.setAngle(rs);
-            rig.lElbR.setAngle(le);
-            rig.rElbR.setAngle(re);
-            rig.lShYaw.setAngle(3);
-            rig.rShYaw.setAngle(-3);
-            rig.lean.setAngle(lean + (stagger > 0 ? stagger / 0.22 * 28 : 0));
-            rig.twist.setAngle(Math.sin(p) * 5);
-            rig.headX.setAngle(-8 + Math.sin(t * 1.3) * 5 + (type == Z_SMOKER ? 45 * wp : 0));
-            rig.headZ.setAngle(Math.sin(t * 0.9) * 9);
-            double open = windup > 0 ? 10 + 30 * wp : 10 + Math.abs(Math.sin(t * 2.2)) * 10;
-            rig.jaw.setAngle(-open);
-            if (rig.sack != null) {
-                double s = 1 + 0.45 * wp;
-                rig.sack.setScaleX(s);
-                rig.sack.setScaleY(s);
-                rig.sack.setScaleZ(0.8 * s);
-            }
-        }
-    }
-
     public static void main(String[] args) {
         launch(args);
     }
