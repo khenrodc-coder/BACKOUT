@@ -18,6 +18,7 @@ Tank - the slowest zombie but 4 times bigger that the normal zombie it can kill 
 2nd UPDATE!
 Add that the present year is January 1 2099
 It Show the Date and Time at the bottom left 
+add character can sleep in bed 
 When the character sleep at night it will skip the night time to the next morning and shows the new Date and Time
 The time cycle per day is faster than the nomal time 
 Make a Day cycle Morning, Afternoon and Evening 
