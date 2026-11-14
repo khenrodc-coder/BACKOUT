@@ -1,0 +1,24 @@
+# Build output
+target/
+build/
+out/
+
+# Gradle caches (stray ones were inside src/)
+.gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+nbproject/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+hs_err_pid*
