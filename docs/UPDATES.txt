@@ -1,0 +1,85 @@
+UPDATE! 
+
+Add FPP botton (done)
+add jump for the character (space button) (done)
+
+improve all the animation 
+add crouch for the character (C)
+add climb for the character if character near the wall and click space twice it can climb up to the wall
+add a mini map in the top Right 
+add quick equip items
+make the world bigger or open world 
+add more buildings, houses, cars, mauntains, bridges, lake, trees, street light broken walls, burning houses.
+the character can enter the house and buildings, in the door (click f button to open and close) in the open window (clicking the space button twice). 
+and change it dont make it wave by wave the zombie must randomly spawn like (zombie inside the house or buildings at the road or inside the car.
+types of zombie (Walker - A normal zombie that want to eat you, Runner - A type of zombie that faster that any type of zombies it can kill you if it bites you one time,
+Tank - the slowest zombie but 4 times bigger that the normal zombie it can kill you instantly when it landed a punch on you, Smoker - i can summon a smoke in his mouth and can suffocate you and kill you.
+
+2nd UPDATE!
+Add that the present year is January 1 2099
+It Show the Date and Time at the bottom left 
+add character can sleep in bed 
+When the character sleep at night it will skip the night time to the next morning and shows the new Date and Time
+The time cycle per day is faster than the nomal time 
+Make a Day cycle Morning, Afternoon and Evening 
+Every 3rd week of the month the moon will change to red blood moon
+When red blood moon every Zombies Will turn to a runner type of zombies it will change the body color to black and the eye will turn to red
+
+3rd UPDATE!
+
+
+==============================================================================
+3rd UPDATE  -  game states, main menu, save/load, settings, world map
+(first stage of docs/reference/FEATURES_ROADMAP.md, in the order of
+ docs/reference/TECHNICAL_IMPLEMENTATION_NOTES.md)
+==============================================================================
+DONE
+ [x] GameState (MENU, PLAYING, PAUSED, MAP, SETTINGS, GAME_OVER) - one setState() drives input/updates
+ [x] 3D landing menu: cinematic orbit over the town at dusk, drifting fog, idle zombies,
+     Continue (disabled without a valid save) / Start New Game (confirms) / Settings / Exit
+ [x] Save / load: versioned, CRC-checked, written via temp file + replace, rolling backup,
+     every field validated; quick save F5, autosave every 2 min, save on quit-to-menu
+     Saved: date/time (Blood Moon follows from the calendar), player transform, health/stamina,
+     weapon + ammo, medkits/grenades, kills, threat, torch, camera mode, opened doors,
+     remaining pickups, living zombies, explored map, discovered places, waypoint
+ [x] Deterministic world: the save stores the world seed, so Continue rebuilds the same map
+ [x] Settings: graphics quality (bloom + draw distance), volume (stored; no audio yet),
+     mouse sensitivity, FOV, fullscreen, rebindable keys (central Action / InputMap)
+ [x] World map (M): player arrow + heading, fog of war, discoverable places, waypoint
+     (left click set / right click clear, also shown on the mini-map), M or Esc closes,
+     gameplay input is suspended while open
+ [x] Pause menu: Resume / Save / Settings / Restart run / Quit to menu
+ [x] Unit tests: SaveManager, Settings, InputMap  (mvn test)
+
+NOT YET (next stages of the roadmap)
+ [ ] Player animation upgrades (reload per weapon, door reach, vault, blending)
+ [ ] 2x houses + natural interiors, large city districts, chunk streaming
+ [ ] Inventory / hunger / thirst / crafting, weather, vehicles
+ [ ] Zombie hearing / sight / search AI and hordes
+ [ ] Audio (the volume setting is ready for it)
+
+
+==============================================================================
+4th UPDATE  -  interaction architecture + animation transitions
+(roadmap: "Input and interaction architecture" and "Animation transitions")
+==============================================================================
+DONE
+ [x] Interactable / InteractionSystem: doors and beds register as interactables; the best one in
+     range (distance + priority) shows a contextual prompt "[E] Open door" / "[E] Sleep (night only)"
+     and ONE key (E, or the old F) uses it. New object types only implement the interface.
+ [x] ActionLock: one timed action at a time. Weapon switch, door use, firing, reloading, throwing,
+     medkits and sleeping can no longer overlap or interrupt each other by accident.
+ [x] Door interaction: the right arm reaches out, the door moves at the moment of contact, and it
+     aborts cleanly ("TOO FAR" / "DOORWAY BLOCKED") if you walk away or something steps in the way.
+ [x] Weapon switch: old weapon lowers, model swaps at ~0.19 s, new weapon raises (no more instant pop);
+     fire / reload are blocked during the swap.
+ [x] Reload animation per weapon: pistol (mag swap + slide rack), rifle (mag out / in / charging
+     handle), shotgun (muzzle up, three shells, pump). All curves start and end at the ready pose.
+ [x] Hit reaction: torso knock-back, head/torso twist toward the nearest threat, 0.3 s stagger slow-down.
+ [x] Settings are versioned: older files with separate door / sleep keys migrate to the new defaults.
+ [x] Tests: InteractionSystem, ActionLock, ReloadPoses, settings migration (32 unit tests total)
+
+NOT YET
+ [ ] Loot containers, doors that can be locked / barricaded, vehicle doors (just add Interactables)
+ [ ] Vault / climb transition polish, stair and ladder animations
+ [ ] Next roadmap stage: 2x houses with natural interiors (modular room builder), then city districts
