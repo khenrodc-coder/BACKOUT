@@ -26,6 +26,7 @@ Every 3rd week of the month the moon will change to red blood moon
 When red blood moon every Zombies Will turn to a runner type of zombies it will change the body color to black and the eye will turn to red
 
 3rd UPDATE!
+<<<<<<< HEAD
 
 
 ==============================================================================
@@ -83,3 +84,10 @@ NOT YET
  [ ] Loot containers, doors that can be locked / barricaded, vehicle doors (just add Interactables)
  [ ] Vault / climb transition polish, stair and ladder animations
  [ ] Next roadmap stage: 2x houses with natural interiors (modular room builder), then city districts
+=======
+add a 3D loading screen or landing screen that has continue game, start new game, settings 
+make the house twice bigger than the normal house also the door make it bigger that fits the character also the cars and object inside the house make it looks natural 
+also improve the animation effect make it more realistic and more human doing like opening doors, reloading animation, climbing animation walking, running and crouching improve all
+make the world more bigger like a whole big city 
+can open the map using "m" button 
+>>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a

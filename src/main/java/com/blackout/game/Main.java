@@ -1,5 +1,6 @@
 package com.blackout.game;
 
+<<<<<<< HEAD
 import com.blackout.game.core.Action;
 import com.blackout.game.core.GameState;
 import com.blackout.game.core.Gfx;
@@ -17,6 +18,13 @@ import com.blackout.game.systems.ReloadPoses;
 import com.blackout.game.ui.MainMenu;
 import com.blackout.game.ui.SettingsPanel;
 import com.blackout.game.ui.WorldMapView;
+=======
+import com.blackout.game.core.Gfx;
+import com.blackout.game.core.Mats;
+import com.blackout.game.effects.*;
+import com.blackout.game.entities.*;
+import com.blackout.game.environment.*;
+>>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
 
 import static com.blackout.game.core.Constants.*;
 import static com.blackout.game.core.Gfx.*;
@@ -1103,11 +1111,14 @@ public class Main extends javafx.application.Application {
         createRadioTowers();
         createGrass();
         createDebris();
+<<<<<<< HEAD
         poiDefs.add(new Object[]{"Last Outpost", 0.0, 0.0});
         poiDefs.add(new Object[]{"Old Town", 0.0, 700.0});
         poiDefs.add(new Object[]{"River Bridge", 0.0, RIVER_Z});
         poiDefs.add(new Object[]{"Footbridge", 700.0, RIVER_Z});
         poiDefs.add(new Object[]{"Lake", LAKE_X, LAKE_Z});
+=======
+>>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
     }
 
     private void addRoad(double cx, double cz, double w, double d) {
@@ -1620,7 +1631,10 @@ public class Main extends javafx.application.Application {
             world.getChildren().add(tw);
             registerCull(tw, x, z, 2200);
             addObs(x, z, 64, 64, 60, false);
+<<<<<<< HEAD
             poiDefs.add(new Object[]{"Radio Tower", x, z});
+=======
+>>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
             placed++;
         }
         // pylon line running north-south
@@ -1654,7 +1668,10 @@ public class Main extends javafx.application.Application {
             }
             lastZ = z;
         }
+<<<<<<< HEAD
         poiDefs.add(new Object[]{"Power Line", px, 300.0});
+=======
+>>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
     }
 
     /** Swaying grass patches and bushes spread over the whole map (culled by distance). */

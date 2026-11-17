@@ -7,11 +7,14 @@ public final class Constants {
     private Constants() {
     }
 
+<<<<<<< HEAD
     /** Re-seeds the shared RNG. World generation consumes it first, so the same seed rebuilds the same map. */
     public static void reseed(long seed) {
         RNG.setSeed(seed);
     }
 
+=======
+>>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
     public static final double GROUND_Y = 110;
     public static final double TANK_Y = 2.5;               // tank height scale
     public static final double TANK_XZ = 3.0;              // tank width scale
