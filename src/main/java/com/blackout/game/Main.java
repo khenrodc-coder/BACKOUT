@@ -1,7 +1,7 @@
 package com.blackout.game;
 
-<<<<<<< HEAD
 import com.blackout.game.core.Action;
+import com.blackout.game.core.Dims;
 import com.blackout.game.core.GameState;
 import com.blackout.game.core.Gfx;
 import com.blackout.game.core.Mats;
@@ -15,16 +15,12 @@ import com.blackout.game.systems.ActionLock;
 import com.blackout.game.systems.Interactable;
 import com.blackout.game.systems.InteractionSystem;
 import com.blackout.game.systems.ReloadPoses;
+import com.blackout.game.world.ChunkManager;
+import com.blackout.game.world.DistrictPlan;
+import com.blackout.game.world.WorldState;
 import com.blackout.game.ui.MainMenu;
 import com.blackout.game.ui.SettingsPanel;
 import com.blackout.game.ui.WorldMapView;
-=======
-import com.blackout.game.core.Gfx;
-import com.blackout.game.core.Mats;
-import com.blackout.game.effects.*;
-import com.blackout.game.entities.*;
-import com.blackout.game.environment.*;
->>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
 
 import static com.blackout.game.core.Constants.*;
 import static com.blackout.game.core.Gfx.*;
@@ -99,7 +95,16 @@ public class Main extends javafx.application.Application {
     private static final int TREE_COUNT = 220;
     private static final double VIEW_BUILD = 1300;          // draw distance for buildings / cars
     private static final double VIEW_SMALL = 900;           // draw distance for trees / small props
-    private static final double WORLD_BOUNDARY = 1480;
+    private static final double WORLD_BOUNDARY = 1480;          // west, east and south edge
+    private static final double WORLD_MAX_Z = 3320;              // the downtown district extends the map to the north
+
+    private static double clampX(double x) {
+        return Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, x));
+    }
+
+    private static double clampZ(double z) {
+        return Math.max(-WORLD_BOUNDARY, Math.min(WORLD_MAX_Z, z));
+    }
     private static final double WALL_T = 6;
     private static final double DOOR_W = 50;
     private static final double CELL = 160;
@@ -218,6 +223,8 @@ public class Main extends javafx.application.Application {
     private double autosaveClock, exploreClock, menuTime;
 
     // ---- interaction + action transitions (4th stage)
+    /** How close the player must be to a bed (prompt and sleeping use the same number). */
+    private static final double BED_RANGE = 100;
     private final ActionLock lock = new ActionLock();
     private final InteractionSystem interactions = new InteractionSystem();
     private double reachBlend, hitReact, hitSide;
@@ -242,6 +249,12 @@ public class Main extends javafx.application.Application {
     private final List<double[]> roadRects = new ArrayList<>();
     private final List<TreeFactory.Tree> trees = new ArrayList<>();
     private final List<VegetationFactory.Chunk> grassChunks = new ArrayList<>();
+
+    // ---- streamed downtown district (5th stage): chunks load and unload around the player, changes live in WorldState
+    private final WorldState worldState = new WorldState();
+    private ChunkManager<DistrictBuilder.Content> chunks;
+    private int staticBuildingCount;
+    private final Map<Building, Interactable> streamedDoors = new HashMap<>();
 
     // materials
     private PhongMaterial bloodMat, sparkMat, brassMat, dustMat, emberMat, tracerMat, moteMat, smokeMat, matConcrete, matWood,
@@ -280,7 +293,20 @@ public class Main extends javafx.application.Application {
         world = new Group();
         createLighting(world);
         createSky(world);
+        Mats.warmUp();
         createWorld(world);
+        staticBuildingCount = buildings.size();
+        chunks = new ChunkManager<>(DistrictPlan.CHUNK, 560, 780, 1, DistrictPlan::exists, new ChunkManager.Loader<DistrictBuilder.Content>() {
+            @Override
+            public DistrictBuilder.Content load(int cx, int cz) {
+                return loadChunk(cx, cz);
+            }
+
+            @Override
+            public void unload(int cx, int cz, DistrictBuilder.Content c) {
+                unloadChunk(c);
+            }
+        });
         createPlayer(world);
         createCamera();
         createMotes(world);
@@ -393,7 +419,7 @@ public class Main extends javafx.application.Application {
         pauseOverlay = createPauseOverlay();
         root.getChildren().addAll(gameOverOverlay, pauseOverlay);
 
-        worldMap = new WorldMapView(roadRects, buildings, new double[]{LAKE_X, LAKE_Z, LAKE_RX, LAKE_RZ}, RIVER_Z, 100);
+        worldMap = new WorldMapView(roadRects, buildings, new double[]{LAKE_X, LAKE_Z, LAKE_RX, LAKE_RZ}, RIVER_Z, 100, worldSeed);
         for (Object[] p : poiDefs) {
             worldMap.addPoi((String) p[0], (Double) p[1], (Double) p[2]);
         }
@@ -839,7 +865,7 @@ public class Main extends javafx.application.Application {
         if (Math.abs(feetY - GROUND_Y) > 45) {
             return null;
         }
-        double px = player.getTranslateX(), pz = player.getTranslateZ(), bd = 75;
+        double px = player.getTranslateX(), pz = player.getTranslateZ(), bd = BED_RANGE;
         double[] best = null;
         for (double[] b : beds) {
             double d = dist(px, pz, b[0], b[1]);
@@ -1078,7 +1104,7 @@ public class Main extends javafx.application.Application {
         // tiled grass (three texture variants so the ground does not look uniform)
         PhongMaterial[] grass = {Mats.GRASS_A, Mats.GRASS_B, Mats.GRASS_C};
         for (int i = 0; i < 6; i++) {
-            for (int j = 0; j < 6; j++) {
+            for (int j = 0; j < 9; j++) {                    // nine rows: the last three lie under the downtown district
                 w.getChildren().add(Gfx.plane(-1500 + i * 600, -1500 + j * 600, 600, 600, 60, GROUND_Y - 0.1, grass[(i * 3 + j * 5 + (i ^ j)) % 3]));
             }
         }
@@ -1087,6 +1113,15 @@ public class Main extends javafx.application.Application {
         addRoad(865, 700, 1570, 140);
         addRoad(600, 1210, 90, 880);
         addRoad(-600, 1210, 90, 880);
+        addRoad(0, 2450, 160, 1600);                                          // the avenue continues north into downtown
+        for (int k = DistrictPlan.MIN_CX; k <= DistrictPlan.MAX_CX + 1; k++) {
+            if (k != 0) {
+                addRoad(k * DistrictPlan.CHUNK, 2400, 64, 1664);
+            }
+        }
+        for (int k = DistrictPlan.MIN_CZ; k <= DistrictPlan.MAX_CZ + 1; k++) {
+            addRoad(0, k * DistrictPlan.CHUNK, 2464, 64);
+        }
         PhongMaterial paint = mat(Color.rgb(210, 195, 130), Color.WHITE, 64);
         for (int z = -1450; z <= 1450; z += 120) {
             if (Math.abs(z - 700) > 110) {
@@ -1111,14 +1146,17 @@ public class Main extends javafx.application.Application {
         createRadioTowers();
         createGrass();
         createDebris();
-<<<<<<< HEAD
         poiDefs.add(new Object[]{"Last Outpost", 0.0, 0.0});
         poiDefs.add(new Object[]{"Old Town", 0.0, 700.0});
         poiDefs.add(new Object[]{"River Bridge", 0.0, RIVER_Z});
         poiDefs.add(new Object[]{"Footbridge", 700.0, RIVER_Z});
         poiDefs.add(new Object[]{"Lake", LAKE_X, LAKE_Z});
-=======
->>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
+        poiDefs.addAll(DistrictPlan.landmarks(worldSeed));
+        // mountains along the east and west edges of downtown (made last so the older world content is unchanged)
+        for (int i = 0; i < 12; i++) {
+            double off = 1750 + RNG.nextDouble() * 450, t = 1750 + RNG.nextDouble() * 1800;
+            addMountain(i % 2 == 0 ? -off : off, t, 260 + RNG.nextDouble() * 230, 300 + RNG.nextDouble() * 430);
+        }
     }
 
     private void addRoad(double cx, double cz, double w, double d) {
@@ -1174,7 +1212,7 @@ public class Main extends javafx.application.Application {
             int side = i % 4;
             double t = RNG.nextDouble() * 3400 - 1700, off = 1750 + RNG.nextDouble() * 450;
             double x = side == 0 ? t : side == 1 ? t : side == 2 ? -off : off;
-            double z = side == 0 ? -off : side == 1 ? off : t;
+            double z = side == 0 ? -off : side == 1 ? off + (WORLD_MAX_Z - WORLD_BOUNDARY) : t;   // the north range sits beyond downtown
             addMountain(x, z, 260 + RNG.nextDouble() * 230, 300 + RNG.nextDouble() * 430);
         }
     }
@@ -1352,23 +1390,38 @@ public class Main extends javafx.application.Application {
 
     // ===================== HOUSES =====================
     private Building addHouse(double bx, double bz, double w, double d, double h, int front, boolean burning, boolean flat, Color col) {
+        if (!flat) {
+            h = Dims.HOUSE_WALL_H;               // houses follow the player-scale dimensions, whatever the caller passed
+        }
         Building b = new Building(bx, bz, w, d, h, front);
         b.burning = burning;
         buildings.add(b);
         PhongMaterial wall = burning ? mat(Color.rgb(34, 30, 28), Color.rgb(20, 20, 20), 6) : mat(col, Color.rgb(40, 40, 40), 10);
-        double T = WALL_T;
-        double fz = bz + front * (d / 2 - T / 2), bkz = bz - front * (d / 2 - T / 2);
-        double[][] fOps = w >= 160 ? new double[][]{{-(w / 2 - 34), 26, 1}, {0, DOOR_W, 0}, {w / 2 - 34, 26, 1}} : new double[][]{{0, DOOR_W, 0}};
-        buildWall(b, bx, fz, w, true, h, fOps, wall);
-        buildWall(b, bx, bkz, w, true, h, w >= 80 ? new double[][]{{0, 26, 1}} : new double[0][], wall);
-        double[][] sOps = d >= 90 ? new double[][]{{0, 26, 1}} : new double[0][];
-        buildWall(b, bx - (w / 2 - T / 2), bz, d - 2 * T, false, h, sOps, wall);
-        buildWall(b, bx + (w / 2 - T / 2), bz, d - 2 * T, false, h, sOps, wall);
-        addDoor(b, bx, fz, front);
-        b.group.getChildren().add(box(w - 2 * T, 1.2, d - 2 * T, floorMat, bx, GROUND_Y - 0.6, bz));
-        if (!burning) {
-            b.group.getChildren().add(sph(3, glow(Color.rgb(255, 214, 140)), bx, GROUND_Y - h + 10, bz, 1, 1, 1));
-            b.group.getChildren().add(sph(2.5, glow(Color.rgb(255, 214, 140)), bx, GROUND_Y - h - 1, b.doorZ + front * 6, 1, 1, 1));
+        double T = flat ? WALL_T : Dims.HOUSE_WALL_T;
+        double fz = bz + front * (d / 2 - T / 2);
+        HouseBuilder.Result built = null;
+        if (flat) {
+            double bkz = bz - front * (d / 2 - T / 2);
+            double[][] fOps = w >= 160 ? new double[][]{{-(w / 2 - 34), 26, 1}, {0, DOOR_W, 0}, {w / 2 - 34, 26, 1}} : new double[][]{{0, DOOR_W, 0}};
+            buildWall(b, bx, fz, w, true, h, fOps, wall);
+            buildWall(b, bx, bkz, w, true, h, w >= 80 ? new double[][]{{0, 26, 1}} : new double[0][], wall);
+            double[][] sOps = d >= 90 ? new double[][]{{0, 26, 1}} : new double[0][];
+            buildWall(b, bx - (w / 2 - T / 2), bz, d - 2 * T, false, h, sOps, wall);
+            buildWall(b, bx + (w / 2 - T / 2), bz, d - 2 * T, false, h, sOps, wall);
+            addDoor(b, bx, fz, front);
+            b.group.getChildren().add(box(w - 2 * T, 1.2, d - 2 * T, floorMat, bx, GROUND_Y - 0.6, bz));
+            if (!burning) {
+                b.group.getChildren().add(sph(3, glow(Color.rgb(255, 214, 140)), bx, GROUND_Y - h + 10, bz, 1, 1, 1));
+                b.group.getChildren().add(sph(2.5, glow(Color.rgb(255, 214, 140)), bx, GROUND_Y - h - 1, b.doorZ + front * 6, 1, 1, 1));
+            }
+        } else {
+            // real house: rooms, doorways, windows and furniture come from a generated floor plan (see HouseLayout / HouseBuilder)
+            HouseLayout layout = HouseLayout.generate(w, d, RNG, burning);
+            built = HouseBuilder.build(b, layout, wall, burning, this::addObs, RNG);
+            beds.addAll(built.beds);
+            if (!burning) {
+                b.group.getChildren().add(sph(2.5, glow(Color.rgb(255, 214, 140)), b.doorX, GROUND_Y - Dims.HOUSE_DOOR_H - 8, b.doorZ + front * 8, 1, 1, 1));
+            }
         }
         double rise = 0;
         if (flat) {
@@ -1398,26 +1451,35 @@ public class Main extends javafx.application.Application {
         b.group.getChildren().add(b.roof);
         if (!flat) {
             addHouseDetails(b, bx, bz, fz, w, d, h, front, rise);
-        }
-        addFurniture(b);
-        for (int i = 0; i < 2; i++) {
-            for (int a = 0; a < 8; a++) {
-                double sx = bx + (RNG.nextDouble() - 0.5) * (w - 2 * T - 30), sz = bz + (RNG.nextDouble() - 0.5) * (d - 2 * T - 30);
-                if (Math.abs(sz - b.doorZ) > 50) {
-                    b.spawn.add(new double[]{sx, sz});
-                    break;
+            b.spawn.addAll(built.spawns);                         // free floor points chosen by the layout
+            int found = 0;
+            for (double[] l : built.loot) {                       // supplies lie next to furniture
+                if (found < 2 && RNG.nextDouble() < 0.7) {
+                    createPickup(RNG.nextInt(3), l[0], l[1]);
+                    found++;
                 }
             }
-        }
-        if (RNG.nextDouble() < 0.5 && !b.spawn.isEmpty()) {
-            double[] p = b.spawn.get(0);
-            createPickup(RNG.nextInt(3), p[0] + 14, p[1] + 10);
+        } else {
+            addFurniture(b);
+            for (int i = 0; i < 2; i++) {
+                for (int a = 0; a < 8; a++) {
+                    double sx = bx + (RNG.nextDouble() - 0.5) * (w - 2 * T - 30), sz = bz + (RNG.nextDouble() - 0.5) * (d - 2 * T - 30);
+                    if (Math.abs(sz - b.doorZ) > 50) {
+                        b.spawn.add(new double[]{sx, sz});
+                        break;
+                    }
+                }
+            }
+            if (RNG.nextDouble() < 0.5 && !b.spawn.isEmpty()) {
+                double[] p = b.spawn.get(0);
+                createPickup(RNG.nextInt(3), p[0] + 14, p[1] + 10);
+            }
         }
         world.getChildren().add(b.group);
         registerCull(b.group, bx, bz, VIEW_BUILD);
         if (burning) {
-            addFire(bx - w / 4, GROUND_Y - h - rise * 0.4, bz, 2.4, true);
-            addFire(bx + w / 5, GROUND_Y - h - rise * 0.4, bz + 6, 1.9, true);
+            addFire(bx - w / 4, GROUND_Y - h - rise * 0.4, bz, 3.2, true);
+            addFire(bx + w / 5, GROUND_Y - h - rise * 0.4, bz + 6, 2.6, true);
         }
         return b;
     }
@@ -1426,23 +1488,25 @@ public class Main extends javafx.application.Application {
     private void addHouseDetails(Building b, double bx, double bz, double fz, double w, double d, double h, int front, double rise) {
         boolean ruined = b.burning;
         if (!ruined && RNG.nextDouble() < 0.7) {
-            BuildingDetail.porch(b.group, bx, fz, front, h, GROUND_Y + 8, RNG);
+            BuildingDetail.porch(b.group, b.doorX, b.doorZ, front, 190, GROUND_Y + 8, RNG);   // roof clears the 132-high door
         }
-        if (w >= 160) {
-            for (int sx = -1; sx <= 1; sx += 2) {
-                double wx = bx + sx * (w / 2 - 34);
-                if (ruined || RNG.nextDouble() < 0.3) {
-                    BuildingDetail.boards(b.group, wx, GROUND_Y - 53, fz + 4 * front - 3.5, true, 26, 30, RNG);
-                } else {
-                    BuildingDetail.shutters(b.group, wx, GROUND_Y - 53, fz + 4 * front - 4, true, 26, 30, RNG);
-                }
+        double winH = Dims.WINDOW_HEAD - Dims.WINDOW_SILL, winY = GROUND_Y - Dims.WINDOW_SILL - winH / 2;
+        for (HouseLayout.Opening o : b.layout.openings) {
+            if (o.door || o.side != HouseLayout.Side.FRONT) {
+                continue;
+            }
+            double wx = bx + o.center;
+            if (ruined || RNG.nextDouble() < 0.3) {
+                BuildingDetail.boards(b.group, wx, winY, fz + 5 * front - 3.5, true, o.width, winH, RNG);
+            } else {
+                BuildingDetail.shutters(b.group, wx, winY, fz + 5 * front - 4, true, o.width, winH, RNG);
             }
         }
         for (int s = -1; s <= 1; s += 2) {
             BuildingDetail.gutter(b.roof, bx, bz + s * (d / 2 + 5), w, GROUND_Y - h + 1);
         }
         if (RNG.nextDouble() < 0.65) {
-            BuildingDetail.chimney(b.roof, bx + w * 0.25, bz + d / 6, GROUND_Y - h - rise * 0.67);
+            BuildingDetail.chimney(b.roof, bx + w * 0.25, bz + d / 6, GROUND_Y - h - rise * 0.67, 1.7);
         }
     }
 
@@ -1528,47 +1592,105 @@ public class Main extends javafx.application.Application {
     }
 
     // ===================== TOWN / SUBURBS / FOREST =====================
+    /** Footprint of a house: about 4.6-6.8 m wide and 4.8-5.5 m deep, so every room fits real furniture at player scale. */
+    private double[] houseSize() {
+        return new double[]{300 + RNG.nextInt(141), 310 + RNG.nextInt(51)};
+    }
+
+    /**
+     * True when a house of this footprint can stand here: inside the playable area, clear of every other building, the river
+     * (including a lane for its door), the lake and, optionally, the roads. {@code margin} is the free space kept all round.
+     */
+    private boolean houseSpotFree(double x, double z, double w, double d, double margin, boolean checkRoads) {
+        if (Math.abs(x) + w / 2 > 1330 || Math.abs(z) + d / 2 > 1330) {
+            return false;
+        }
+        if (Math.abs(x) - w / 2 < 560 && Math.abs(z) - d / 2 < 560) {      // the fenced outpost
+            return false;
+        }
+        for (Building b : buildings) {
+            if (Math.abs(x - b.x) < (w + b.w) / 2 + margin && Math.abs(z - b.z) < (d + b.d) / 2 + margin) {
+                return false;
+            }
+        }
+        if (Math.abs(z - RIVER_Z) < d / 2 + 50 + 40) {            // the river itself plus a bank (doors are turned away from it)
+            return false;
+        }
+        for (double fx : new double[]{-0.5, 0, 0.5}) {
+            for (double fz : new double[]{-0.5, 0, 0.5}) {
+                if (inLake(x + fx * w, z + fz * d, margin + 40)) {
+                    return false;
+                }
+            }
+        }
+        if (checkRoads) {
+            for (double[] r : roadRects) {
+                if (Math.abs(x - r[0]) < (w + r[2]) / 2 + margin && Math.abs(z - r[1]) < (d + r[3]) / 2 + margin) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private void createTown() {
         Color[] cols = {Color.rgb(150, 138, 118), Color.rgb(110, 86, 78), Color.rgb(96, 110, 120), Color.rgb(128, 128, 112), Color.rgb(90, 104, 88)};
-        for (double x = -1300; x <= 1300; x += 210) {
-            for (int side = -1; side <= 1; side += 2) {
-                if (RNG.nextDouble() < 0.35) {
+        // x ranges a house must not touch: the gap at the outpost gate and the two roads that run south from the main street
+        double[][] bands = {{-125, 125}, {-660, -540}, {540, 660}};
+        for (int side = -1; side <= 1; side += 2) {
+            double cursor = -1200;
+            while (cursor < 1150) {
+                double[] sz = houseSize();
+                double w = sz[0], d = sz[1], px = cursor + w / 2;
+                double[] hit = null;
+                for (double[] bnd : bands) {
+                    if (px - w / 2 < bnd[1] && px + w / 2 > bnd[0]) {
+                        hit = bnd;
+                        break;
+                    }
+                }
+                if (hit != null) {
+                    cursor = hit[1] + 6;
                     continue;
                 }
-                double px = x + (RNG.nextDouble() - 0.5) * 40;
-                if (Math.abs(px) < 150 || Math.abs(Math.abs(px) - 600) < 80 || (side == -1 && Math.abs(px) < 600)) {
-                    continue;
+                if (px + w / 2 > 1250) {
+                    break;
                 }
-                double w = 110 + RNG.nextInt(60), d = 90 + RNG.nextInt(40);
+                boolean skip = RNG.nextDouble() < 0.1 || (side == -1 && Math.abs(px) < 600);
                 double pz = 700 + side * (70 + 22 + d / 2);
-                addHouse(px, pz, w, d, 84, -side, RNG.nextDouble() < 0.22, false, cols[RNG.nextInt(cols.length)]);
+                if (!skip && houseSpotFree(px, pz, w, d, 30, false)) {
+                    addHouse(px, pz, w, d, 84, -side, RNG.nextDouble() < 0.22, false, cols[RNG.nextInt(cols.length)]);
+                }
+                cursor = px + w / 2 + 28 + RNG.nextInt(50);
             }
         }
         for (int s = -1; s <= 1; s += 2) {
-            double px = 600 * s + 130 * s, pz = 1100 + RNG.nextInt(200);
-            addHouse(px, pz, 120, 100, 84, -1, RNG.nextDouble() < 0.3, false, cols[RNG.nextInt(cols.length)]);
+            for (int attempt = 0; attempt < 25; attempt++) {
+                double[] sz = houseSize();
+                double px = s * (600 + 65 + sz[0] / 2 + 15), pz = 1000 + RNG.nextInt(260);
+                if (houseSpotFree(px, pz, sz[0], sz[1], 40, true)) {
+                    addHouse(px, pz, sz[0], sz[1], 84, -1, RNG.nextDouble() < 0.3, false, cols[RNG.nextInt(cols.length)]);
+                    break;
+                }
+            }
         }
     }
 
     private void createSuburbs() {
         Color[] cols = {Color.rgb(140, 128, 110), Color.rgb(104, 82, 74), Color.rgb(100, 112, 104), Color.rgb(120, 120, 104)};
         int placed = 0;
-        for (int t = 0; t < 400 && placed < 18; t++) {
-            double x = (RNG.nextDouble() - 0.5) * 2700, z = (RNG.nextDouble() - 0.5) * 2700;
-            if ((Math.abs(x) < 600 && Math.abs(z) < 600) || onRoad(x, z, 130) || inLake(x, z, 80) || Math.abs(z - RIVER_Z) < 120 || (z > 520 && z < 900)) {
+        for (int t = 0; t < 3000 && placed < 16; t++) {
+            double x = (RNG.nextDouble() - 0.5) * 2400, z = (RNG.nextDouble() - 0.5) * 2400;
+            if ((Math.abs(x) < 600 && Math.abs(z) < 600) || (z > 480 && z < 940)) {
                 continue;
             }
-            boolean ok = true;
-            for (Building b : buildings) {
-                if (dist(x, z, b.x, b.z) < 230) {
-                    ok = false;
-                    break;
-                }
-            }
-            if (!ok) {
+            double[] sz = houseSize();
+            if (!houseSpotFree(x, z, sz[0], sz[1], 55, true)) {
                 continue;
             }
-            addHouse(x, z, 110 + RNG.nextInt(60), 90 + RNG.nextInt(40), 84, RNG.nextBoolean() ? 1 : -1, RNG.nextDouble() < 0.18, false, cols[RNG.nextInt(cols.length)]);
+            boolean nearRiver = Math.abs(z - RIVER_Z) < 450;
+            int front = nearRiver ? (z > RIVER_Z ? 1 : -1) : (RNG.nextBoolean() ? 1 : -1);      // door faces away from the river
+            addHouse(x, z, sz[0], sz[1], 84, front, RNG.nextDouble() < 0.18, false, cols[RNG.nextInt(cols.length)]);
             placed++;
         }
     }
@@ -1616,7 +1738,7 @@ public class Main extends javafx.application.Application {
             }
             boolean near = false;
             for (Building b : buildings) {
-                if (dist(x, z, b.x, b.z) < 200) {
+                if (dist(x, z, b.x, b.z) < 340) {
                     near = true;
                     break;
                 }
@@ -1631,10 +1753,7 @@ public class Main extends javafx.application.Application {
             world.getChildren().add(tw);
             registerCull(tw, x, z, 2200);
             addObs(x, z, 64, 64, 60, false);
-<<<<<<< HEAD
             poiDefs.add(new Object[]{"Radio Tower", x, z});
-=======
->>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
             placed++;
         }
         // pylon line running north-south
@@ -1668,10 +1787,7 @@ public class Main extends javafx.application.Application {
             }
             lastZ = z;
         }
-<<<<<<< HEAD
         poiDefs.add(new Object[]{"Power Line", px, 300.0});
-=======
->>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
     }
 
     /** Swaying grass patches and bushes spread over the whole map (culled by distance). */
@@ -1679,6 +1795,9 @@ public class Main extends javafx.application.Application {
         final double size = 200;
         for (double cx = -1700 + size / 2; cx < 1700; cx += size) {
             for (double cz = -1700 + size / 2; cz < 1700; cz += size) {
+                if (cz > 1450) {
+                    continue;                                       // downtown has pavements, not grass
+                }
                 boolean wild = Math.hypot(cx, cz) > 900;
                 VegetationFactory.Chunk c = VegetationFactory.grassChunk(cx, cz, size, GROUND_Y, RNG,
                         (x, z) -> !onRoad(x, z, 14) && !inLake(x, z, 20) && Math.abs(z - RIVER_Z) > 60 && buildingAt(x, z) == null
@@ -1787,6 +1906,11 @@ public class Main extends javafx.application.Application {
     }
 
     private void addStreetLight(double x, double z, boolean broken) {
+        for (Building b : buildings) {                      // never plant a pole in front of somebody's door
+            if (b.layout != null && dist(x, z, b.doorX, b.doorZ) < 80) {
+                return;
+            }
+        }
         Group g = new Group();
         g.setTranslateX(x);
         g.setTranslateY(GROUND_Y);
@@ -1815,6 +1939,16 @@ public class Main extends javafx.application.Application {
         for (int i = 0; i < 16; i++) {
             double x = (RNG.nextDouble() - 0.5) * 2600, z = (RNG.nextDouble() - 0.5) * 2600;
             if ((Math.abs(x) < 560 && Math.abs(z) < 560) || onRoad(x, z, 20) || inLake(x, z, 30) || Math.abs(z - RIVER_Z) < 90 || blocked(x, z, 70, 0, false)) {
+                continue;
+            }
+            boolean onHouse = false;
+            for (Building hb : buildings) {                 // houses are big now: keep ruins clear of the whole footprint, inside and out
+                if (Math.abs(x - hb.x) < hb.w / 2 + 90 && Math.abs(z - hb.z) < hb.d / 2 + 90) {
+                    onHouse = true;
+                    break;
+                }
+            }
+            if (onHouse) {
                 continue;
             }
             boolean alongX = RNG.nextBoolean();
@@ -2207,8 +2341,8 @@ public class Main extends javafx.application.Application {
                 double fx = Math.sin(rad), fz = Math.cos(rad), rx = Math.cos(rad), rz = -Math.sin(rad);
                 double finX = fx * mz + rx * mx, finZ = fz * mz + rz * mx;
                 double ox = player.getTranslateX(), oz = player.getTranslateZ();
-                double nx = Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, ox + finX * speed * dt));
-                double nz = Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, oz + finZ * speed * dt));
+                double nx = clampX(ox + finX * speed * dt);
+                double nz = clampZ(oz + finZ * speed * dt);
                 if (!blocked(nx, oz, PLAYER_RADIUS, feetY, true)) {
                     player.setTranslateX(nx);
                 }
@@ -2227,6 +2361,9 @@ public class Main extends javafx.application.Application {
         for (Iterator<Pickup> it = pickups.iterator(); it.hasNext();) {
             Pickup pk = it.next();
             if (Math.abs(feetY - GROUND_Y) < 130 && dist(px, pz, pk.x, pk.z) < 36) {
+                if (pk.id != null) {
+                    worldState.markTaken(pk.id);
+                }
                 collect(pk);
                 world.getChildren().remove(pk.node);
                 it.remove();
@@ -2380,7 +2517,7 @@ public class Main extends javafx.application.Application {
 
         @Override
         public double range() {
-            return 75;
+            return BED_RANGE;
         }
 
         @Override
@@ -2470,6 +2607,9 @@ public class Main extends javafx.application.Application {
                 return;
             }
             b.doorOpen = opening;
+            if (b.id != null) {
+                worldState.setDoorOpen(b.id, opening);
+            }
             status(opening ? "DOOR OPENED" : "DOOR CLOSED", Color.LIGHTGRAY);
         }, null);
     }
@@ -2905,7 +3045,7 @@ public class Main extends javafx.application.Application {
                 double[] rr = roadRects.get(RNG.nextInt(roadRects.size()));
                 double sx = rr[0] + (RNG.nextDouble() - 0.5) * (rr[2] - 40), sz = rr[1] + (RNG.nextDouble() - 0.5) * (rr[3] - 40);
                 double d = dist(px, pz, sx, sz);
-                if (d < minD || d > maxD || Math.abs(sx) > WORLD_BOUNDARY || Math.abs(sz) > WORLD_BOUNDARY || blocked(sx, sz, 34, 0, false)) {
+                if (d < minD || d > maxD || Math.abs(sx) > WORLD_BOUNDARY || sz < -WORLD_BOUNDARY || sz > WORLD_MAX_Z || blocked(sx, sz, 34, 0, false)) {
                     continue;
                 }
                 Enemy e = spawnEnemy(sx, sz, type);
@@ -2962,11 +3102,11 @@ public class Main extends javafx.application.Application {
         double nx = ex + ux * speed * dt, nz = ez + uz * speed * dt;
         boolean mxOk = !blocked(nx, ez, e.radius, 0, false);
         if (mxOk) {
-            e.model.setTranslateX(Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, nx)));
+            e.model.setTranslateX(clampX(nx));
         }
         boolean mzOk = !blocked(e.model.getTranslateX(), nz, e.radius, 0, false);
         if (mzOk) {
-            e.model.setTranslateZ(Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, nz)));
+            e.model.setTranslateZ(clampZ(nz));
         }
         if (!mxOk && !mzOk) {
             e.stuck += dt;
@@ -3008,6 +3148,9 @@ public class Main extends javafx.application.Application {
                 return new double[]{pb.outX, pb.outZ};
             }
             return new double[]{pb.inX, pb.inZ};
+        }
+        if (eb != null && eb == pb) {
+            return eb.route(ex, ez, px, pz);               // same house: go through the doorways, not into the walls
         }
         return new double[]{px, pz};
     }
@@ -3103,8 +3246,8 @@ public class Main extends javafx.application.Application {
                         e.wx = sp[0];
                         e.wz = sp[1];
                     } else {
-                        e.wx = Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, ex + (RNG.nextDouble() - 0.5) * 260));
-                        e.wz = Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, ez + (RNG.nextDouble() - 0.5) * 260));
+                        e.wx = clampX(ex + (RNG.nextDouble() - 0.5) * 260);
+                        e.wz = clampZ(ez + (RNG.nextDouble() - 0.5) * 260);
                     }
                 }
             } else if (e.state == S_WANDER) {
@@ -3820,8 +3963,8 @@ public class Main extends javafx.application.Application {
     }
 
     // ===================== PICKUPS =====================
-    private void createPickup(int kind, double x, double z) {
-        if (pickups.size() > 60) {
+    private Pickup createPickup(int kind, double x, double z) {
+        if (pickups.size() > 160) {
             Pickup old = pickups.remove(0);
             world.getChildren().remove(old.node);
         }
@@ -3849,6 +3992,7 @@ public class Main extends javafx.application.Application {
         pk.node = g;
         pickups.add(pk);
         world.getChildren().add(g);
+        return pk;
     }
 
     private void collect(Pickup pk) {
@@ -4209,6 +4353,7 @@ public class Main extends javafx.application.Application {
     /** Leaves the menu and starts playing. */
     private void beginRun(boolean fresh) {
         setState(GameState.PLAYING);
+        streamNow();
         menu.setVisible(false);
         settingsPanel.setVisible(false);
         worldMap.setVisible(false);
@@ -4321,10 +4466,17 @@ public class Main extends javafx.application.Application {
             d.reserve.put(w.name(), reserveAmmo.get(w));
         }
         StringBuilder doors = new StringBuilder();
-        for (Building b : buildings) {
-            doors.append(b.doorOpen ? '1' : '0');
+        for (int i = 0; i < staticBuildingCount && i < buildings.size(); i++) {
+            doors.append(buildings.get(i).doorOpen ? '1' : '0');
         }
         d.doors = doors.toString();
+        for (Building b : buildings) {                       // loaded streamed doors: record their current state first
+            if (b.id != null) {
+                worldState.setDoorOpen(b.id, b.doorOpen);
+            }
+        }
+        d.openDoorIds.addAll(worldState.openDoorIds());
+        d.takenIds.addAll(worldState.takenIds());
         d.explored = worldMap.exportExplored();
         d.poiFound = worldMap.exportPoi();
         d.hasWaypoint = worldMap.hasWaypoint();
@@ -4407,7 +4559,9 @@ public class Main extends javafx.application.Application {
         firstPerson = d.firstPerson;
         viewButton.setText(firstPerson ? "TPP" : "FPP");
         playerRig.headGroup.setVisible(!firstPerson);
-        for (int i = 0; i < buildings.size() && i < d.doors.length(); i++) {
+        chunks.unloadAll();
+        worldState.load(d.openDoorIds, d.takenIds);
+        for (int i = 0; i < staticBuildingCount && i < buildings.size() && i < d.doors.length(); i++) {
             Building b = buildings.get(i);
             b.doorOpen = d.doors.charAt(i) == '1';
             b.doorAmt = b.doorOpen ? 1 : 0;
@@ -4436,6 +4590,7 @@ public class Main extends javafx.application.Application {
         for (double[] pk : d.pickups) {
             createPickup((int) pk[0], pk[1], pk[2]);
         }
+        streamNow();
         updateCulling();
     }
 
@@ -4453,6 +4608,87 @@ public class Main extends javafx.application.Application {
             autosaveClock = 0;
             if (!sleeping && saveGame(false)) {
                 status("AUTOSAVED", Color.LIGHTGRAY);
+            }
+        }
+    }
+
+    // ---- streamed downtown district
+    /** Loads everything within range at once (new game, loading a save): no visible pop-in on the first frame. */
+    private void streamNow() {
+        double px = player.getTranslateX(), pz = player.getTranslateZ();
+        for (int i = 0; i < 60 && chunks.update(px, pz) > 0; i++) {
+            // keep going until nothing is left to build
+        }
+    }
+
+    private DistrictBuilder.Content loadChunk(int cx, int cz) {
+        DistrictBuilder.Content c = DistrictBuilder.build(DistrictPlan.generate(worldSeed, cx, cz), this::addObs);
+        for (int i = 0; i < c.buildings.size(); i++) {
+            Building b = c.buildings.get(i);
+            b.id = c.doorIds.get(i);
+            if (worldState.isDoorOpen(b.id)) {                 // somebody opened this door earlier
+                b.doorOpen = true;
+                b.doorAmt = 1;
+                b.doorRot.setAngle(90 * b.front);
+                b.doorObs.active = false;
+            }
+            buildings.add(b);
+            Interactable door = new DoorTarget(b);
+            streamedDoors.put(b, door);
+            interactions.register(door);
+            for (double[] sp : b.spawn) {                      // the odd zombie is already inside
+                if (enemies.size() < 60 && RNG.nextDouble() < 0.35) {
+                    spawnEnemy(sp[0], sp[1], RNG.nextInt(3) == 0 ? Z_RUNNER : Z_WALKER);
+                }
+            }
+        }
+        trees.addAll(c.trees);
+        for (Object[] l : c.loot) {
+            String id = (String) l[0];
+            if (!worldState.isTaken(id)) {
+                createPickup((Integer) l[1], (Double) l[2], (Double) l[3]).id = id;
+            }
+        }
+        world.getChildren().add(c.root);
+        return c;
+    }
+
+    private void unloadChunk(DistrictBuilder.Content c) {
+        world.getChildren().remove(c.root);
+        for (Obstacle o : c.obstacles) {
+            removeObs(o);
+        }
+        for (Building b : c.buildings) {
+            worldState.setDoorOpen(b.id, b.doorOpen);          // whoever opened or closed it (zombies do too), it stays that way
+            buildings.remove(b);
+            Interactable t = streamedDoors.remove(b);
+            if (t != null) {
+                interactions.remove(t);
+            }
+            if (insideB == b) {
+                insideB = null;
+            }
+        }
+        trees.removeAll(c.trees);
+        String prefix = "p:" + c.cx + ":" + c.cz + ":";
+        for (Iterator<Pickup> it = pickups.iterator(); it.hasNext();) {
+            Pickup pk = it.next();
+            if (pk.id != null && pk.id.startsWith(prefix)) {
+                world.getChildren().remove(pk.node);
+                it.remove();
+            }
+        }
+    }
+
+    private void removeObs(Obstacle o) {
+        int x0 = (int) Math.floor((o.x - o.halfWidth) / CELL), x1 = (int) Math.floor((o.x + o.halfWidth) / CELL);
+        int z0 = (int) Math.floor((o.z - o.halfDepth) / CELL), z1 = (int) Math.floor((o.z + o.halfDepth) / CELL);
+        for (int cx = x0; cx <= x1; cx++) {
+            for (int cz = z0; cz <= z1; cz++) {
+                List<Obstacle> l = grid.get(cellKey(cx, cz));
+                if (l != null) {
+                    l.remove(o);
+                }
             }
         }
     }
@@ -4643,6 +4879,8 @@ public class Main extends javafx.application.Application {
 
     private void restartGame() {
         resetRunState();
+        worldState.clear();
+        chunks.unloadAll();
         worldMap.resetExploration();
         setState(GameState.PLAYING);
         gameOverOverlay.setVisible(false);
@@ -4699,6 +4937,7 @@ public class Main extends javafx.application.Application {
                 if ((++mapTick & 1) == 0) {
                     drawMinimap();
                 }
+                chunks.update(player.getTranslateX(), player.getTranslateZ());
                 if (state == GameState.PLAYING && health > 0) {
                     tickMapAndAutosave(dt);
                 }

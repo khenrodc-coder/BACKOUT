@@ -55,6 +55,7 @@ public final class Mats {
 
     private static final Image[] WATER = new Image[WATER_FRAMES];
     private static final Map<Integer, PhongMaterial> PAINT = new HashMap<>();
+    private static final Map<Integer, PhongMaterial> FACADES = new HashMap<>();
     private static final Map<Integer, PhongMaterial> BLADES = new HashMap<>();
 
     private Mats() {
@@ -113,5 +114,23 @@ public final class Mats {
             default:
                 return PLASTER_GREY;
         }
+    }
+
+    /** Builds the lazily created facade textures up front so the first city block does not stall the game. */
+    public static void warmUp() {
+        for (int style = 0; style < 3; style++) {
+            for (int tone = 0; tone < 4; tone++) {
+                facade(style, tone);
+            }
+        }
+    }
+
+    /** Facade tile material: style 0 glass office, 1 brick apartment, 2 concrete; tone picks the wall colour (0-3). */
+    public static PhongMaterial facade(int style, int tone) {
+        return FACADES.computeIfAbsent(style * 10 + tone, k -> {
+            double[][] cols = {{150, 154, 160}, {128, 96, 80}, {170, 160, 140}, {104, 116, 128}};
+            double[] c = style == 0 ? new double[]{90, 100, 112} : cols[tone % 4];
+            return Gfx.tex(TextureFactory.facade(256, c[0], c[1], c[2], style, 300 + k), Color.rgb(22, 22, 24), 10);
+        });
     }
 }

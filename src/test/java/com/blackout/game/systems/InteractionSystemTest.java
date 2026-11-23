@@ -96,4 +96,19 @@ class InteractionSystemTest {
         assertEquals(0, s.size());
         assertNull(s.current());
     }
+
+    @Test
+    void removedTargetsNoLongerAppearOrAct() {
+        InteractionSystem s = new InteractionSystem();
+        Target a = new Target("a", 10, 0, 100), b = new Target("b", 50, 0, 100);
+        s.register(a);
+        s.register(b);
+        assertSame(a, s.update(0, 0));
+        s.remove(a);                                         // e.g. the chunk holding this door was unloaded
+        assertNull(s.current());
+        assertSame(b, s.update(0, 0));
+        assertTrue(s.use());
+        assertEquals(0, a.used);
+        assertEquals(1, b.used);
+    }
 }

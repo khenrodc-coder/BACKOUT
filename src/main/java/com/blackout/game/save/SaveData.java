@@ -37,6 +37,10 @@ public final class SaveData {
     public boolean hasWaypoint;
     public double waypointX, waypointZ;
 
+    /** Streamed-world changes: ids of opened doors and taken pickups (see WorldState). */
+    public final List<String> openDoorIds = new ArrayList<>();
+    public final List<String> takenIds = new ArrayList<>();
+
     /** {type, x, z, health, yaw} */
     public final List<double[]> enemies = new ArrayList<>();
     /** {kind, x, z} */

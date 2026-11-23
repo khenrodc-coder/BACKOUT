@@ -40,8 +40,13 @@ public final class BuildingDetail {
     }
 
     public static void chimney(Group roof, double x, double z, double topY) {
-        roof.getChildren().add(Gfx.box(14, 44, 14, Mats.BRICK_RED, x, topY - 12, z));
-        roof.getChildren().add(Gfx.box(18, 4, 18, Mats.CONCRETE, x, topY - 36, z));
+        chimney(roof, x, z, topY, 1);
+    }
+
+    /** Chimney scaled for bigger houses; it is sunk into the roof so it never floats. */
+    public static void chimney(Group roof, double x, double z, double topY, double s) {
+        roof.getChildren().add(Gfx.box(14 * s, 44 * s + 12, 14 * s, Mats.BRICK_RED, x, topY - 12 * s - 6, z));
+        roof.getChildren().add(Gfx.box(18 * s, 4 * s, 18 * s, Mats.CONCRETE, x, topY - 36 * s, z));
     }
 
     public static void shutters(Group g, double x, double y, double z, boolean alongX, double w, double h, Random rn) {

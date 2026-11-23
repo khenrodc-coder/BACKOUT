@@ -16,6 +16,13 @@ public final class InteractionSystem {
         targets.add(i);
     }
 
+    public void remove(Interactable i) {
+        targets.remove(i);
+        if (current == i) {
+            current = null;
+        }
+    }
+
     public void clear() {
         targets.clear();
         current = null;

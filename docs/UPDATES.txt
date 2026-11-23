@@ -26,7 +26,6 @@ Every 3rd week of the month the moon will change to red blood moon
 When red blood moon every Zombies Will turn to a runner type of zombies it will change the body color to black and the eye will turn to red
 
 3rd UPDATE!
-<<<<<<< HEAD
 
 
 ==============================================================================
@@ -84,10 +83,60 @@ NOT YET
  [ ] Loot containers, doors that can be locked / barricaded, vehicle doors (just add Interactables)
  [ ] Vault / climb transition polish, stair and ladder animations
  [ ] Next roadmap stage: 2x houses with natural interiors (modular room builder), then city districts
-=======
-add a 3D loading screen or landing screen that has continue game, start new game, settings 
-make the house twice bigger than the normal house also the door make it bigger that fits the character also the cars and object inside the house make it looks natural 
-also improve the animation effect make it more realistic and more human doing like opening doors, reloading animation, climbing animation walking, running and crouching improve all
-make the world more bigger like a whole big city 
-can open the map using "m" button 
->>>>>>> ff27d6927653b9cba7010f8f2288388bf2484d2a
+
+
+==============================================================================
+5th UPDATE  -  larger houses with natural interiors (roadmap: "reusable house modules")
+==============================================================================
+Measured first: the soldier is 118 units tall (~65 units per metre) but the old houses had 84-unit walls and 52-unit
+doors. A literal 2x leaves rooms ~80 units deep, too small for a bed, so houses are sized for believable rooms:
+about 4.6-6.8 m wide and 4.8-5.5 m deep, 168-unit ceilings, 64x132 doors (see core/Dims.java).
+DONE
+ [x] HouseLayout: seeded floor plans (back bedroom + bath/WC, interior partition with doorways, open living/kitchen,
+     windows placed away from tall furniture). Furniture is wall-aligned, slightly imperfect (chairs pulled out and
+     turned, open drawers, clothes/books/shoes on the floor); ruined houses add stains and knocked-over chairs.
+ [x] Path guarantee: furniture is only accepted if the front door still reaches every doorway (flood fill with a
+     20-unit walker radius). Spawn and loot points keep 34 / 24 units of clearance from walls and furniture.
+ [x] HouseBuilder + HouseProps: walls with real door/window openings, door frame and leaf, window frames/muntins/
+     curtains, per-room floors (wood / dark wood / concrete), ceiling lights, ~25 furniture models, collision for all.
+ [x] Zombies route through doorways inside a house (Building.route) instead of pressing against partitions.
+ [x] Placement: one houseSpotFree() check (footprint vs buildings, outpost fence, river, lake, roads, world edge);
+     riverside doors face away from the river; street lights skip door lanes; ruins stay off house footprints.
+ [x] Bed prompt and sleeping share one range (BED_RANGE); porch, shutters, boards, chimney scaled to the new houses.
+ [x] Tests: 11 layout tests over 300 random houses (sizes, overlaps, clear doors, bed present, spawn/loot reachable,
+     walker never crosses a wall, determinism). Headless game runs: every house walkable from outside through the
+     door to every spawn point and bed, on 10 world seeds (11-12 houses per world).
+NOT YET
+ [ ] Outpost buildings still use the old small shell (their flat roofs are climbable and part of the start area).
+ [ ] Second floors / stairs, locked or barricaded doors, loot containers (just add Interactables).
+ [ ] A visual pass in a real 3D run: furniture facing, colours and lighting were checked as floor plans only.
+ [ ] City districts and chunk streaming (next roadmap stage).
+
+
+==============================================================================
+6th UPDATE  -  downtown district and chunk streaming (roadmap: "prototype a small streamed district")
+==============================================================================
+DONE
+ [x] ChunkManager: loads the nearest missing chunks (budget: one per frame), unloads only when clearly away (hysteresis, no
+     thrashing on borders), profiling counters (loads, unloads, average / worst build ms, peak loaded).
+ [x] WorldState: opened doors and taken supplies live as data with stable ids (d:cx:cz:n, p:cx:cz:n); they survive unloading
+     and are saved (older saves without them still load). Doors changed by zombies are recorded too.
+ [x] DistrictPlan: 6 x 4 downtown blocks north of the town, generated from (seed, chunk) only. Exactly one supermarket and one
+     fuel station per city; offices, apartments, shop rows, parks, plazas, parking, parked cars, street lights.
+ [x] DistrictBuilder / ShopBuilder / ShopProps: textured window-bay facades on towers (new facade texture), enterable shops with a
+     shopfront door, sign, awning, stocked shelves, counters and fridges, a fuel canopy with pumps, benches, trees.
+ [x] Bounds: the playable world now reaches z = 3320; ground, roads, mountains and the map were extended. The older part of the
+     world is unchanged for a given seed, so old saves still match their worlds.
+ [x] World map covers the whole area (portrait), shows downtown blocks and landmarks (Downtown, Supermarket, Gas Station).
+ [x] Verified headless in the real game: 12 chunks stream in around the player, all 7 shops in the test city are walkable from the
+     door to every spawn point, leaving frees every obstacle, building, pickup, tree and downtown node (no leaks), a door opened
+     and supplies taken stay that way after unload / reload and after save / load, loading a save in downtown streams the
+     surroundings in before the first frame. Block build time: about 21 ms average, 74-99 ms worst (software renderer).
+ [x] Tests: ChunkManager, WorldState, DistrictPlan (8 seeds x 24 blocks: lots inside blocks, no overlaps, doors face streets and are
+     clear of buildings and cars, exactly one supermarket / gas station), ShopLayout (4 sizes), save format. 72 unit tests.
+NOT YET
+ [ ] Looks: nothing of downtown has been seen rendered (no GPU here) - check facades, shop interiors and lighting in a real run.
+ [ ] Office / apartment interiors and upper floors; rooftops are not reachable.
+ [ ] Zombies are not persisted per chunk (shop zombies respawn when a block reloads); no district-specific hordes yet.
+ [ ] Background (off-thread) preparation of chunk data; a block still builds on the UI thread (about one frame of work).
+ [ ] Next roadmap stage: survival systems (hunger, thirst, inventory, crafting) and zombie senses.

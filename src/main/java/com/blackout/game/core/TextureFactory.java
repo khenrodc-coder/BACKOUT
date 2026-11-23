@@ -220,6 +220,39 @@ public final class TextureFactory {
         });
     }
 
+    /**
+     * One window bay of a building facade (tile it up and across). Style 0: glass office curtain wall, 1: brick apartment with
+     * small windows, 2: concrete block with medium windows.
+     */
+    public static WritableImage facade(int s, double r, double g, double b, int style, long seed) {
+        return make(s, s, (x, y, u, v, c) -> {
+            set(c, r, g, b);
+            mul(c, 0.78 + 0.34 * fbm(u * 3 + seed, v * 3) + (hash(x, y) - 0.5) * 0.08);
+            if (style == 1) {
+                double rows = v * 12, off = ((int) rows % 2) * 0.5, col = (u * 6 + off) % 1;
+                if (rows % 1 < 0.1 || col < 0.06) {
+                    mul(c, 0.8);
+                }
+            }
+            double x0 = style == 0 ? 0.04 : style == 1 ? 0.27 : 0.17, x1 = 1 - x0;
+            double y0 = style == 0 ? 0.08 : 0.2, y1 = style == 0 ? 0.84 : 0.8;
+            boolean glass = u >= x0 && u <= x1 && v >= y0 && v <= y1;
+            boolean frame = u >= x0 - 0.03 && u <= x1 + 0.03 && v >= y0 - 0.03 && v <= y1 + 0.03;
+            if (glass) {
+                double t = (v - y0) / (y1 - y0);
+                set(c, 24 + 46 * (1 - t), 40 + 56 * (1 - t), 58 + 62 * (1 - t));
+                mul(c, 0.9 + 0.2 * fbm(u * 6, v * 6));
+                if (Math.abs(u - 0.5) < 0.012 || (style != 0 && Math.abs(v - (y0 + y1) / 2) < 0.012)) {
+                    set(c, 26, 28, 30);
+                }
+            } else if (frame) {
+                set(c, 30, 32, 34);
+            } else if (v > y1 + 0.03 && v < y1 + 0.07 && u > x0 - 0.05 && u < x1 + 0.05) {
+                mul(c, 1.25);                                   // sill
+            }
+        });
+    }
+
     public static WritableImage concrete(int s, long seed) {
         boolean[][] cr = cracks(s, 10, seed);
         return make(s, s, (x, y, u, v, c) -> {

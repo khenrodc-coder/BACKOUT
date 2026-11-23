@@ -58,6 +58,9 @@ class SaveManagerTest {
         d.enemies.add(new double[]{2, 100, 200, 450, 90});
         d.enemies.add(new double[]{0, -50, 75.5, 100, 270});
         d.pickups.add(new double[]{1, 10, 20});
+        d.openDoorIds.add("d:-1:5:0");
+        d.openDoorIds.add("d:2:7:1");
+        d.takenIds.add("p:0:4:3");
         return d;
     }
 
@@ -94,6 +97,8 @@ class SaveManagerTest {
         assertEquals(2, out.enemies.size());
         assertEquals(450, out.enemies.get(0)[3]);
         assertEquals(1, out.pickups.size());
+        assertEquals(java.util.List.of("d:-1:5:0", "d:2:7:1"), out.openDoorIds);
+        assertEquals(java.util.List.of("p:0:4:3"), out.takenIds);
         assertTrue(sm.hasValidSave());
     }
 
@@ -171,5 +176,30 @@ class SaveManagerTest {
         sm.save(sample());
         sm.delete();
         assertEquals(SaveManager.Status.MISSING, sm.load().status());
+    }
+
+    private static String resign(String body) {
+        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        crc.update(body.getBytes(StandardCharsets.UTF_8));
+        return body + "crc=" + Long.toHexString(crc.getValue()) + "\n";
+    }
+
+    @Test
+    void savesFromBeforeTheStreamedWorldStillLoad() {
+        String s = SaveManager.serialize(sample());
+        String body = s.substring(0, s.lastIndexOf("crc=")).replaceAll("ws\\.(doors|taken)=[^\\n]*\\n", "");
+        SaveManager.LoadResult r = SaveManager.parse(resign(body));
+        assertEquals(SaveManager.Status.OK, r.status());
+        assertTrue(r.data().openDoorIds.isEmpty());
+        assertTrue(r.data().takenIds.isEmpty());
+    }
+
+    @Test
+    void garbageWorldStateIdsAreDroppedNotTrusted() {
+        String s = SaveManager.serialize(sample());
+        String body = s.substring(0, s.lastIndexOf("crc=")).replaceAll("ws\\.doors=[^\\n]*\\n", "ws.doors=d:1:1:1,../../x,d:9:9:9\n");
+        SaveManager.LoadResult r = SaveManager.parse(resign(body));
+        assertEquals(SaveManager.Status.OK, r.status());
+        assertEquals(java.util.List.of("d:1:1:1", "d:9:9:9"), r.data().openDoorIds);
     }
 }

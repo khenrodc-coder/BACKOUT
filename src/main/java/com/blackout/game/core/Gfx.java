@@ -218,6 +218,39 @@ public final class Gfx {
         return g;
     }
 
+    /**
+     * A flat textured quad grid (any orientation) of nx x ny tiles: {@code (ux,uy,uz)} spans the whole width, {@code (vx,vy,vz)} the whole
+     * height (pointing UP the texture). The texture repeats per tile. Both windings are added so it is lit correctly from the front.
+     */
+    public static Group tiledQuad(double ox, double oy, double oz, double ux, double uy, double uz, double vx, double vy, double vz, int nx, int ny, PhongMaterial m) {
+        Group g = new Group();
+        for (int k = 0; k < 2; k++) {
+            TriangleMesh t = new TriangleMesh();
+            t.getTexCoords().addAll(0f, 1f, 1f, 1f, 1f, 0f, 0f, 0f);
+            int v = 0;
+            for (int i = 0; i < nx; i++) {
+                for (int j = 0; j < ny; j++) {
+                    double a = i / (double) nx, b = (i + 1) / (double) nx, c = j / (double) ny, d = (j + 1) / (double) ny;
+                    t.getPoints().addAll((float) (ox + ux * a + vx * c), (float) (oy + uy * a + vy * c), (float) (oz + uz * a + vz * c),
+                            (float) (ox + ux * b + vx * c), (float) (oy + uy * b + vy * c), (float) (oz + uz * b + vz * c),
+                            (float) (ox + ux * b + vx * d), (float) (oy + uy * b + vy * d), (float) (oz + uz * b + vz * d),
+                            (float) (ox + ux * a + vx * d), (float) (oy + uy * a + vy * d), (float) (oz + uz * a + vz * d));
+                    if (k == 0) {
+                        t.getFaces().addAll(v, 0, v + 1, 1, v + 2, 2, v, 0, v + 2, 2, v + 3, 3);
+                    } else {
+                        t.getFaces().addAll(v, 0, v + 2, 2, v + 1, 1, v, 0, v + 3, 3, v + 2, 2);
+                    }
+                    v += 4;
+                }
+            }
+            MeshView mv = new MeshView(t);
+            mv.setMaterial(m);
+            mv.setCullFace(CullFace.BACK);
+            g.getChildren().add(mv);
+        }
+        return g;
+    }
+
     /** A plane centred on (cx, cz) covering w x d, tiled with the given tile size. */
     public static Group plane(double cx, double cz, double w, double d, double tile, double y, PhongMaterial m) {
         int nx = Math.max(1, (int) Math.round(w / tile)), nz = Math.max(1, (int) Math.round(d / tile));

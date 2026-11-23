@@ -99,6 +99,8 @@ public final class SaveManager {
         put(sb, "hasWaypoint", d.hasWaypoint);
         put(sb, "waypointX", d.waypointX);
         put(sb, "waypointZ", d.waypointZ);
+        put(sb, "ws.doors", String.join(",", d.openDoorIds));
+        put(sb, "ws.taken", String.join(",", d.takenIds));
         for (int i = 0; i < d.enemies.size(); i++) {
             put(sb, "enemy." + i, join(d.enemies.get(i)));
         }
@@ -211,6 +213,8 @@ public final class SaveManager {
             d.hasWaypoint = bool(kv, "hasWaypoint");
             d.waypointX = num(kv, "waypointX", -5000, 5000);
             d.waypointZ = num(kv, "waypointZ", -5000, 5000);
+            readIds(kv.get("ws.doors"), d.openDoorIds);        // absent in saves from before the streamed district
+            readIds(kv.get("ws.taken"), d.takenIds);
             for (int i = 0; i < MAX_ENTITIES && kv.containsKey("enemy." + i); i++) {
                 d.enemies.add(list(kv.get("enemy." + i), 5));
             }
@@ -220,6 +224,17 @@ public final class SaveManager {
             return new LoadResult(Status.OK, d, "OK");
         } catch (RuntimeException e) {
             return bad("Save file is damaged: " + e.getMessage());
+        }
+    }
+
+    private static void readIds(String v, java.util.List<String> out) {
+        if (v == null || v.isEmpty()) {
+            return;
+        }
+        for (String id : v.split(",")) {
+            if (out.size() < 4000 && com.blackout.game.world.WorldState.validId(id)) {
+                out.add(id);
+            }
         }
     }
 
