@@ -1,4 +1,4 @@
-﻿package com.blackout.game.core;
+package com.blackout.game.core;
 
 import java.util.Random;
 
