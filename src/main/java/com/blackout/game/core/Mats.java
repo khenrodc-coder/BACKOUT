@@ -53,7 +53,21 @@ public final class Mats {
     public static final PhongMaterial TILE_ROOF = Gfx.tex(TextureFactory.brick(256, 112, 52, 38, 71), Color.rgb(14, 14, 14), 6);
     public static final PhongMaterial SLATE_ROOF = Gfx.tex(TextureFactory.brick(256, 62, 66, 72, 72), Color.rgb(20, 20, 22), 10);
 
-    private static final Image[] WATER = new Image[WATER_FRAMES];
+    public static PhongMaterial BLOOD, SPARK, BRASS, DUST, SMOKE, EMBER, TRACER, MOTE, WATER_MAT;
+
+    private static final Image[] WATER_IMG = new Image[WATER_FRAMES];
+
+    public static void init() {
+        BLOOD = Gfx.mat(Color.rgb(120, 8, 8), Color.rgb(220, 60, 60), 60);
+        SPARK = Gfx.glow(Color.rgb(255, 220, 120));
+        BRASS = Gfx.mat(Color.rgb(200, 160, 60), Color.WHITE, 90);
+        DUST = Gfx.mat(Color.rgb(110, 105, 95, 0.55), Color.BLACK, 1);
+        SMOKE = Gfx.mat(Color.rgb(75, 100, 62, 0.35), Color.BLACK, 1);
+        EMBER = Gfx.glow(Color.rgb(255, 120, 30));
+        TRACER = Gfx.glow(Color.rgb(255, 235, 160));
+        MOTE = Gfx.glow(Color.rgb(95, 105, 125));
+        WATER_MAT = Gfx.mat(Color.rgb(18, 52, 80, 0.85), Color.WHITE, 110);
+    }
     private static final Map<Integer, PhongMaterial> PAINT = new HashMap<>();
     private static final Map<Integer, PhongMaterial> FACADES = new HashMap<>();
     private static final Map<Integer, PhongMaterial> BLADES = new HashMap<>();

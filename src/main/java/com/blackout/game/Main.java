@@ -15,6 +15,16 @@ import com.blackout.game.systems.ActionLock;
 import com.blackout.game.systems.Interactable;
 import com.blackout.game.systems.InteractionSystem;
 import com.blackout.game.systems.ReloadPoses;
+import com.blackout.game.systems.CombatSystem;
+import com.blackout.game.systems.ZombieAISystem;
+import com.blackout.game.systems.SurvivalSystem;
+import com.blackout.game.systems.DayNightSystem;
+import com.blackout.game.systems.WeatherSystem;
+import com.blackout.game.systems.InventorySystem;
+import com.blackout.game.systems.SpawnSystem;
+import com.blackout.game.systems.AudioManager;
+import com.blackout.game.systems.CameraController;
+import com.blackout.game.systems.AnimationController;
 import com.blackout.game.world.ChunkManager;
 import com.blackout.game.world.DistrictPlan;
 import com.blackout.game.world.WorldState;
@@ -250,6 +260,18 @@ public class Main extends javafx.application.Application {
     private final List<TreeFactory.Tree> trees = new ArrayList<>();
     private final List<VegetationFactory.Chunk> grassChunks = new ArrayList<>();
 
+    // ---- system classes (Phase 1 refactoring)
+    private CombatSystem combatSystem;
+    private ZombieAISystem zombieAISystem;
+    private SurvivalSystem survivalSystem;
+    private DayNightSystem dayNightSystem;
+    private WeatherSystem weatherSystem;
+    private InventorySystem inventorySystem;
+    private SpawnSystem spawnSystem;
+    private AudioManager audioManager;
+    private CameraController cameraController;
+    private AnimationController animationController;
+
     // ---- streamed downtown district (5th stage): chunks load and unload around the player, changes live in WorldState
     private final WorldState worldState = new WorldState();
     private ChunkManager<DistrictBuilder.Content> chunks;
@@ -289,6 +311,7 @@ public class Main extends javafx.application.Application {
         setState(GameState.MENU);
         reseed(seed);                       // same seed -> identical map
         initMaterials();
+        Mats.init();
         initializeWeaponAmmo();
         world = new Group();
         createLighting(world);
@@ -310,6 +333,52 @@ public class Main extends javafx.application.Application {
         createPlayer(world);
         createCamera();
         createMotes(world);
+
+        // Initialize system classes
+        combatSystem = new CombatSystem(world, RNG, particles, tracers, explosions, grenadeList, smokeClouds, lights, hitMarker);
+        combatSystem.setMuzzleFlash(muzzleFlash, muzzleLight, muzzleLocalY, muzzleLocalZ);
+
+        zombieAISystem = new ZombieAISystem(world, RNG, enemies, buildings, cars, roadRects,
+                smokeClouds, particles,
+                e -> {},
+                dmg -> damagePlayer(dmg, "Torn apart by the infected"),
+                range -> alertZombies(range),
+                () -> effThreat(),
+                () -> bloodMoon,
+                () -> player.getTranslateX(),
+                () -> player.getTranslateZ(),
+                () -> feetY,
+                () -> crouched,
+                () -> sprintingNow,
+                () -> grounded);
+        zombieAISystem.setStaticBuildingCount(staticBuildingCount);
+
+        survivalSystem = new SurvivalSystem(RNG);
+
+        dayNightSystem = new DayNightSystem(sky, celestial, ambientLight, skyMat, voidMat, RNG);
+
+        weatherSystem = new WeatherSystem(world, RNG, particles, lights);
+
+        inventorySystem = new InventorySystem();
+
+        spawnSystem = new SpawnSystem(world, RNG, enemies, buildings, cars, roadRects, pickups,
+                e -> {}, // onEnemySpawned
+                p -> {}); // onPickupSpawned
+
+        audioManager = new AudioManager();
+
+        cameraController = new CameraController(camera, settings);
+
+        animationController = new AnimationController(playerRig, weaponModel, muzzleFlash, weaponPitch,
+                () -> feetY,
+                () -> player.getTranslateX(),
+                () -> player.getTranslateZ(),
+                p -> emit(p.material, 1, p.x, p.y, p.z, p.vx, p.vy, p.vz, p.life, p.gravity, p.bounce, p.blood, 0),
+                () -> grounded,
+                () -> cameraPitch,
+                () -> strafeInput,
+                amt -> shake = Math.max(shake, amt));
+
         registerInteractables();
         if (mode != Mode.LOAD) {
             spawnInitialZombies();
@@ -2112,7 +2181,8 @@ public class Main extends javafx.application.Application {
         if (paused || gameOver) {
             return;
         }
-        firstPerson = !firstPerson;
+        cameraController.toggleCameraMode();
+        firstPerson = cameraController.isFirstPerson();
         viewButton.setText(firstPerson ? "TPP" : "FPP");
         playerRig.headGroup.setVisible(!firstPerson);
     }
@@ -2369,7 +2439,36 @@ public class Main extends javafx.application.Application {
                 it.remove();
             }
         }
-        updatePlayerAnimation(dt, moving && !climbing, sprinting, mz < 0 ? -1 : 1);
+        // Animation controller update
+                animationController.setHeldItem(heldItem);
+                animationController.setPrevHeld(prevHeld);
+                animationController.setCurrentWeapon(currentWeapon);
+                animationController.setIsAiming(isAiming);
+                animationController.setCrouched(crouched);
+                animationController.setClimbing(climbing);
+                animationController.setFiring(firing);
+                animationController.setWeaponKick(weaponKick);
+                animationController.setCameraRecoil(cameraRecoil);
+                animationController.setReloadTimer(reloadTimer);
+                animationController.setReloadDur(reloadDur);
+                animationController.setThrowing(throwing);
+                animationController.setThrew(threw);
+                animationController.setThrowT(throwT);
+                animationController.setUsingMed(usingMed);
+                animationController.setMedT(medT);
+                animationController.setHitReact(hitReact);
+                animationController.setHitSide(hitSide);
+                animationController.setReachBlend(reachBlend);
+                animationController.setMuzzleLight(muzzleLight);
+                animationController.setMuzzleFlashTimer(muzzleFlashTimer);
+                animationController.update(dt, moving && !climbing, sprinting, mz < 0 ? -1 : 1);
+
+                // Sync back animation state
+                weaponKick = animationController.getWeaponKick();
+                cameraRecoil = animationController.getCameraRecoil();
+                walkPhase = animationController.getWalkPhase();
+                moveBlend = animationController.getMoveBlend();
+                swapBlend = animationController.getSwapBlend();
         updateHUD();
     }
 
@@ -4914,26 +5013,76 @@ public class Main extends javafx.application.Application {
                     return;
                 }
                 worldTime += dt;
-                updateClock(dt);
+
+                // Update day/night cycle
+                dayNightSystem.update(dt, sleeping,
+                        Main.this::showBanner,
+                        Main.this::status,
+                        bm -> {
+                            bloodMoon = bm;
+                            for (Enemy e : enemies) e.setBlood(bm);
+                        });
+
+                // Update weather
+                weatherSystem.update(dt, player.getTranslateX(), player.getTranslateZ(), camera.getTranslateY());
+
+                // Update survival system
+                survivalSystem.update(dt, sprintingNow, sleeping, grounded);
+                health = survivalSystem.getHealth();
+                stamina = survivalSystem.getStamina();
+
+                // Auto-shot for assault rifle
                 if (firing && heldItem == 0 && currentWeapon == WeaponType.ASSAULT_RIFLE) {
-                    shoot();
+                    combatSystem.shoot(playerYaw, cameraYaw, cameraPitch,
+                            player.getTranslateX(), player.getTranslateY(), player.getTranslateZ(),
+                            feetY, crouchBlend, crouched, isAiming, firing, heldItem,
+                            paused, gameOver, sleeping, climbing, usingMed, enemies,
+                            () -> effThreat());
                 }
+
                 if (health > 0 && !gameOver) {
                     if (sleeping) {
                         updateSleep(dt);
-                        updatePlayerAnimation(dt, false, false, 1);
+                        animationController.update(dt, false, false, 1);
                     } else {
                         updatePlayer(dt);
                     }
-                    updateEnemies(dt);
-                    updateSpawning(dt);
-                    updateActions(dt);
+                    zombieAISystem.updateEnemies(dt);
+                    zombieAISystem.updateSpawning(dt);
+                    combatSystem.updateActions(dt);
                 } else {
-                    updatePlayerAnimation(dt, false, false, 1);
+                    animationController.update(dt, false, false, 1);
                 }
                 updateWorld(dt);
                 updateEffects(dt);
-                updateCamera(dt);
+                // Camera controller update
+                cameraController.setPlayerPosition(player.getTranslateX(), player.getTranslateZ(), feetY);
+                cameraController.setPlayerYaw(playerYaw);
+                cameraController.setCameraRotation(cameraYaw, cameraPitch);
+                cameraController.setCrouchBlend(crouchBlend);
+                cameraController.setInsideBlend(insideBlend);
+                cameraController.setInsideH(insideH);
+                cameraController.setWalkPhase(walkPhase);
+                cameraController.setMoveBlend(moveBlend);
+                cameraController.setAimBlend(aimBlend);
+                cameraController.setSprintBlend(sprintBlend);
+                cameraController.setLandBlend(landBlend);
+                cameraController.setClimbBlend(climbBlend);
+                cameraController.setIsAiming(isAiming);
+                cameraController.setSprintingNow(sprintingNow);
+                cameraController.setCrouched(crouched);
+                cameraController.setClimbing(climbing);
+                cameraController.setCameraRecoil(cameraRecoil);
+                cameraController.setWeaponKick(weaponKick);
+                cameraController.setStrafeInput(strafeInput);
+                cameraController.update(dt);
+
+                // Sync camera state back
+                smoothedYaw = cameraController.getSmoothedYaw();
+                smoothedPitch = cameraController.getSmoothedPitch();
+                camRoll = cameraController.getCamRoll();
+                shake = cameraController.getShake();
+                currentFov = cameraController.getCurrentFov();
                 if ((++mapTick & 1) == 0) {
                     drawMinimap();
                 }
