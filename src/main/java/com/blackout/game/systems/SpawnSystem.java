@@ -27,14 +27,13 @@ public final class SpawnSystem {
     private final java.util.function.Consumer<Enemy> onEnemySpawned;
     private final java.util.function.Consumer<Pickup> onPickupSpawned;
 
-    public SpawnSystem(Group world, Random rng,
+    public SpawnSystem(Group world,
             List<Enemy> enemies, List<Building> buildings,
             List<Car> cars, List<double[]> roadRects,
             List<Pickup> pickups,
             java.util.function.Consumer<Enemy> onEnemySpawned,
             java.util.function.Consumer<Pickup> onPickupSpawned) {
         this.world = world;
-        this.rng = rng;
         this.enemies = enemies;
         this.buildings = buildings;
         this.cars = cars;
@@ -47,7 +46,7 @@ public final class SpawnSystem {
     // Zombie spawning
     public void spawnZombie(double x, double z, int type) {
         Enemy e = new Enemy(x, z, type);
-        e.model.setTranslateY(Gfx.GROUND_Y);
+        e.model.setTranslateY(Constants.GROUND_Y);
         e.spawnTimer = 0;
         e.idleTimer = 1 + Constants.RNG.nextDouble() * 4;
         enemies.add(e);
@@ -81,7 +80,7 @@ public final class SpawnSystem {
             double sz = rr[1] + (Constants.RNG.nextDouble() - 0.5) * (rr[3] - 40);
             double d = dist(playerX, playerZ, sx, sz);
             if (d < minDist || d > maxDist) continue;
-            if (Math.abs(sx) > Gfx.WORLD_BOUNDARY || sz < -Gfx.WORLD_BOUNDARY || sz > Gfx.WORLD_MAX_Z) continue;
+            if (Math.abs(sx) > Constants.WORLD_BOUNDARY || sz < -Constants.WORLD_BOUNDARY || sz > Constants.WORLD_MAX_Z) continue;
             spawnZombie(sx, sz, type);
             return;
         }
@@ -105,9 +104,9 @@ public final class SpawnSystem {
     }
 
     public void spawnPickupInBuilding(Building b, int maxPickups) {
-        if (b.loot.isEmpty()) return;
+        if (b.spawn.isEmpty()) return;
         int found = 0;
-        for (double[] l : b.loot) {
+        for (double[] l : b.spawn) {
             if (found >= maxPickups) break;
             if (Constants.RNG.nextDouble() < 0.7) {
                 spawnPickup(Constants.RNG.nextInt(3), l[0], l[1]);
@@ -128,7 +127,7 @@ public final class SpawnSystem {
         world.getChildren().add(pk.node);
     }
 
-    private Pickup.Node createPickupModel(int kind, double x, double z) {
+    private Group createPickupModel(int kind, double x, double z) {
         // Simplified - actual model creation in Main
         return null;
     }

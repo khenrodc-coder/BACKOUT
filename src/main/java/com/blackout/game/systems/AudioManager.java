@@ -1,5 +1,7 @@
 package com.blackout.game.systems;
 
+import com.blackout.game.entities.WeaponType;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;

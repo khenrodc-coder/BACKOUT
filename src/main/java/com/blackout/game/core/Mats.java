@@ -77,10 +77,10 @@ public final class Mats {
 
     public static Image waterFrame(int i) {
         i = ((i % WATER_FRAMES) + WATER_FRAMES) % WATER_FRAMES;
-        if (WATER[i] == null) {
-            WATER[i] = TextureFactory.water(128, i / (double) WATER_FRAMES, 36, 78, 98);
+        if (WATER_IMG[i] == null) {
+            WATER_IMG[i] = TextureFactory.water(128, i / (double) WATER_FRAMES, 36, 78, 98);
         }
-        return WATER[i];
+        return WATER_IMG[i];
     }
 
     public static PhongMaterial paint(Color c) {

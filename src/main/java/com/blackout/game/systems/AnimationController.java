@@ -1,6 +1,6 @@
 package com.blackout.game.systems;
 
-import com.blackout.game.core.Gfx;
+import com.blackout.game.core.Constants;
 import com.blackout.game.entities.Rig;
 import com.blackout.game.systems.ReloadPoses;
 import com.blackout.game.entities.WeaponType;
@@ -8,6 +8,7 @@ import com.blackout.game.effects.Particle;
 
 import javafx.scene.Group;
 import javafx.scene.PointLight;
+import javafx.scene.paint.PhongMaterial;
 import javafx.scene.transform.Rotate;
 
 import java.util.List;
@@ -179,9 +180,9 @@ public final class AnimationController {
             double bobX = Math.sin(walkPhase * 2) * 0.9 * moveBlend;
             double bobY = Math.abs(Math.cos(walkPhase)) * 1.6 * moveBlend;
             double back = currentWeapon == WeaponType.SHOTGUN ? 8 : 5;
-            weaponModel.setTranslateX(Gfx.GUN_X + bobX - aimBlend * 2);
-            weaponModel.setTranslateY(Gfx.GUN_Y + breath * 0.6 + bobY - weaponKick * 1.4 + swapBlend * 16 + 5 * sprintBlend);
-            weaponModel.setTranslateZ(Gfx.GUN_Z - weaponKick * back - 6 * sprintBlend);
+            weaponModel.setTranslateX(Constants.GUN_X + bobX - aimBlend * 2);
+            weaponModel.setTranslateY(Constants.GUN_Y + breath * 0.6 + bobY - weaponKick * 1.4 + swapBlend * 16 + 5 * sprintBlend);
+            weaponModel.setTranslateZ(Constants.GUN_Z - weaponKick * back - 6 * sprintBlend);
             weaponPitch.setAngle(getCameraPitch.getAsDouble() * 0.65 + weaponKick * (currentWeapon == WeaponType.SHOTGUN ? 16 : 9) + reloadTilt - 15 * sprintBlend);
         }
 

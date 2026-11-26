@@ -4,7 +4,7 @@ import com.blackout.game.core.Gfx;
 import com.blackout.game.core.Mats;
 import com.blackout.game.core.Constants;
 import com.blackout.game.effects.Particle;
-import com.blackout.game.effects.DynLight;
+import com.blackout.game.environment.DynLight;
 
 import java.util.List;
 import java.util.Random;
@@ -33,15 +33,14 @@ public final class WeatherSystem {
     private boolean lightningActive = false;
 
     private final Group world;
-        private final List<Particle> particles;
+    private final List<Particle> particles;
     private final List<DynLight> lights;
 
     // Rain particles
     private final java.util.List<Particle> rainParticles = new java.util.ArrayList<>();
 
-    public WeatherSystem(Group world, Random rng, List<Particle> particles, List<DynLight> lights) {
+    public WeatherSystem(Group world, List<Particle> particles, List<DynLight> lights) {
         this.world = world;
-        this.rng = rng;
         this.particles = particles;
         this.lights = lights;
     }
@@ -113,7 +112,7 @@ public final class WeatherSystem {
         if (rainParticles.size() > 2000) return;
         Particle p = new Particle();
         p.node = new Box(0.1, 0.5, 0.1);
-        p.node.setMaterial(Mats.WATER);
+        p.node.setMaterial(Mats.WATER_MAT);
         p.node.setTranslateX(x);
         p.node.setTranslateY(y);
         p.node.setTranslateZ(z);

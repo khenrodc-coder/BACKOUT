@@ -30,6 +30,11 @@ public final class Gfx {
     /** Shared soft blob-shadow material (alpha is driven by the day/night cycle in Main). */
     public static final PhongMaterial SHADOW_MAT = mat(Color.rgb(0, 0, 0, 0.4), Color.BLACK, 1);
 
+    // Weapon constants (moved to Constants but kept here for compatibility)
+    public static final double GUN_X = Constants.GUN_X;
+    public static final double GUN_Y = Constants.GUN_Y;
+    public static final double GUN_Z = Constants.GUN_Z;
+
     public static PhongMaterial mat(Color d, Color s, double p) {
         PhongMaterial m = new PhongMaterial(d);
         m.setSpecularColor(s);

@@ -1,8 +1,7 @@
 package com.blackout.game.systems;
 
-import com.blackout.game.core.Gfx;
+import com.blackout.game.core.Constants;
 import com.blackout.game.core.Settings;
-import com.blackout.game.entities.Rig;
 
 import javafx.scene.PerspectiveCamera;
 import javafx.scene.transform.Rotate;
@@ -28,7 +27,7 @@ public final class CameraController {
 
     // References to player state (updated externally)
     private double playerYaw = 0;
-    private double playerX = 0, playerZ = 0, feetY = Gfx.GROUND_Y;
+    private double playerX = 0, playerZ = 0, feetY = Constants.GROUND_Y;
     private double crouchBlend = 0, insideBlend = 0, insideH = 0;
     private double walkPhase = 0, moveBlend = 0, aimBlend = 0;
     private double sprintBlend = 0, landBlend = 0, climbBlend = 0;
@@ -55,7 +54,7 @@ public final class CameraController {
             ty = center - 42 + 18 * crouchBlend + landBlend * 6 + Math.sin(walkPhase * 2) * 1.2 * moveBlend;
             tz = playerZ + Math.cos(rad) * 10;
         } else {
-            double dst = (isAiming ? 0.6 : 1.0) * lerp(Gfx.CAMERA_DISTANCE, 290, insideBlend);
+            double dst = (isAiming ? 0.6 : 1.0) * lerp(Constants.CAMERA_DISTANCE, 290, insideBlend);
             double hgt = lerp(isAiming ? 150 : 175, Math.max(175, insideH + 115), insideBlend) - 14 * crouchBlend;
             double shoulder = isAiming ? 28 : 0;
             tx = playerX - Math.sin(rad) * dst + Math.cos(rad) * shoulder;

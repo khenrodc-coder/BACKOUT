@@ -13,7 +13,6 @@ import com.blackout.game.entities.Rig;
 
 import java.util.Iterator;
 import java.util.List;
-import java.util.Random;
 
 import javafx.scene.Group;
 import javafx.scene.paint.Color;
@@ -26,7 +25,7 @@ import javafx.scene.paint.PhongMaterial;
 public final class ZombieAISystem {
 
     private final Group world;
-        private final List<Enemy> enemies;
+    private final List<Enemy> enemies;
     private final List<Building> buildings;
     private final List<Car> cars;
     private final List<double[]> roadRects;
@@ -50,7 +49,7 @@ public final class ZombieAISystem {
     private int lastThreatInt = 0;
     private int staticBuildingCount = 0;
 
-    public ZombieAISystem(Group world, Random rng,
+    public ZombieAISystem(Group world,
             List<Enemy> enemies, List<Building> buildings,
             List<Car> cars, List<double[]> roadRects,
             List<SmokeCloud> smokeClouds, List<Particle> particles,
@@ -66,7 +65,6 @@ public final class ZombieAISystem {
             java.util.function.BooleanSupplier isSprinting,
             java.util.function.BooleanSupplier isGrounded) {
         this.world = world;
-        this.rng = rng;
         this.enemies = enemies;
         this.buildings = buildings;
         this.cars = cars;
@@ -144,7 +142,7 @@ public final class ZombieAISystem {
 
     private Enemy spawnEnemy(double x, double z, int type) {
         Enemy e = new Enemy(x, z, type);
-        e.model.setTranslateY(Gfx.GROUND_Y);
+        e.model.setTranslateY(Constants.GROUND_Y);
         e.spawnTimer = 0;
         e.idleTimer = 1 + Constants.RNG.nextDouble() * 4;
         if (isBloodMoon.getAsBoolean()) e.setBlood(true);
@@ -183,11 +181,11 @@ public final class ZombieAISystem {
                 double[] rr = roadRects.get(Constants.RNG.nextInt(roadRects.size()));
                 double sx = rr[0] + (Constants.RNG.nextDouble() - 0.5) * (rr[2] - 40), sz = rr[1] + (Constants.RNG.nextDouble() - 0.5) * (rr[3] - 40);
                 double d = dist(px, pz, sx, sz);
-                if (d < minD || d > maxD || Math.abs(sx) > Gfx.WORLD_BOUNDARY || sz < -Gfx.WORLD_BOUNDARY || sz > Gfx.WORLD_MAX_Z || blocked(sx, sz, 34, 0, false)) continue;
+                if (d < minD || d > maxD || Math.abs(sx) > Constants.WORLD_BOUNDARY || sz < -Constants.WORLD_BOUNDARY || sz > Constants.WORLD_MAX_Z || blocked(sx, sz, 34, 0, false)) continue;
                 Enemy e = spawnEnemy(sx, sz, type);
                 if (!initial) {
                     e.spawnTimer = 1.2;
-                    e.model.setTranslateY(Gfx.GROUND_Y + 62);
+                    e.model.setTranslateY(Constants.GROUND_Y + 62);
                 }
                 return;
             }
@@ -256,7 +254,7 @@ public final class ZombieAISystem {
         double px = getPlayerX.getAsDouble(), pz = getPlayerZ.getAsDouble();
         Building pb = findBuildingAt(px, pz);
         double baseSpeed = 62 + getEffThreat.getAsDouble() * 3.5;
-        boolean reachable = getFeetY.getAsDouble() > Gfx.GROUND_Y - 55;
+        boolean reachable = getFeetY.getAsDouble() > Constants.GROUND_Y - 55;
 
         for (Iterator<Enemy> it = enemies.iterator(); it.hasNext();) {
             Enemy e = it.next();
@@ -267,7 +265,7 @@ public final class ZombieAISystem {
                 double fp = Math.min(1, e.deathTime / 0.55);
                 e.fall.setAngle(e.deathDir * fp * fp * (3 - 2 * fp) * 88);
                 double sink = e.deathTime > 9 ? (e.deathTime - 9) * 12 : 0;
-                e.model.setTranslateY(Gfx.GROUND_Y - 9 * e.sy * fp + sink);
+                e.model.setTranslateY(Constants.GROUND_Y - 9 * e.sy * fp + sink);
                 e.model.setVisible(dist < 1100);
                 if (e.deathTime > 14) {
                     world.getChildren().remove(e.model);
@@ -281,7 +279,7 @@ public final class ZombieAISystem {
                 if (e.hiddenTimer <= 0) {
                     if (e.car != null) e.car.rot.setAngle(e.car.baseYaw);
                     e.model.setVisible(dist < 1100);
-                    burst(ex, Gfx.GROUND_Y - 10, ez, 6, 60, 5, 0.8, 0, false, null, Mats.DUST);
+                    burst(ex, Constants.GROUND_Y - 10, ez, 6, 60, 5, 0.8, 0, false, null, Mats.DUST);
                     e.alert = 6;
                 }
                 continue;
@@ -290,11 +288,11 @@ public final class ZombieAISystem {
             e.model.setVisible(dist < 1100);
             if (e.spawnTimer > 0) {
                 e.spawnTimer -= dt;
-                e.model.setTranslateY(Gfx.GROUND_Y + 62 * Math.max(0, e.spawnTimer / 1.2));
+                e.model.setTranslateY(Constants.GROUND_Y + 62 * Math.max(0, e.spawnTimer / 1.2));
                 e.animate(dt, false, false);
                 continue;
             }
-            e.model.setTranslateY(Gfx.GROUND_Y);
+            e.model.setTranslateY(Constants.GROUND_Y);
             if (e.stagger > 0) e.stagger -= dt;
             if (e.slamT > 0) e.slamT -= dt;
             e.attackCd -= dt;
@@ -304,7 +302,7 @@ public final class ZombieAISystem {
             boolean sees = dist < (eb == pb ? det : Math.min(det * 0.4, 160));
             if (e.blood && dist < 1100) sees = true;
             if (sees || e.alert > 0) {
-                if (e.state != com.blackout.game.core.Constants.S_CHASE) burst(ex, Gfx.GROUND_Y - 40 * e.sy, ez, 2, 20, 3, 0.5, 0, false, null, Mats.DUST);
+                if (e.state != com.blackout.game.core.Constants.S_CHASE) burst(ex, Constants.GROUND_Y - 40 * e.sy, ez, 2, 20, 3, 0.5, 0, false, null, Mats.DUST);
                 e.state = com.blackout.game.core.Constants.S_CHASE;
                 e.lostTimer = 7;
             } else if (e.state == com.blackout.game.core.Constants.S_CHASE) {
@@ -348,7 +346,7 @@ public final class ZombieAISystem {
                     moving = moveEnemy(e, t[0], t[1], speed, dt);
                 }
                 e.puffT -= dt;
-                if (e.puffT <= 0) { e.puffT = 0.3; double ry = Math.toRadians(e.yaw); emit(smokeClouds, ex + Math.sin(ry) * 10, Gfx.GROUND_Y - 92 * e.sy, ez + Math.cos(ry) * 10, 0, -14, 0, 1.6, -4, false, false, 1.8); }
+                if (e.puffT <= 0) { e.puffT = 0.3; double ry = Math.toRadians(e.yaw); emit(smokeClouds, ex + Math.sin(ry) * 10, Constants.GROUND_Y - 92 * e.sy, ez + Math.cos(ry) * 10, 0, -14, 0, 1.6, -4, false, false, 1.8); }
             } else {
                 if (e.windup > 0) {
                     e.windup -= dt;
@@ -412,7 +410,7 @@ public final class ZombieAISystem {
         c.z = pz + (Constants.RNG.nextDouble() - 0.5) * 30;
         c.r = 95; c.life = 8;
         smokeClouds.add(c);
-        double ex = e.model.getTranslateX(), ez = e.model.getTranslateZ(), ey = Gfx.GROUND_Y - 92 * e.sy;
+        double ex = e.model.getTranslateX(), ez = e.model.getTranslateZ(), ey = Constants.GROUND_Y - 92 * e.sy;
         for (int i = 0; i < 16; i++) {
             double t = (i + 1) / 16.0;
             emit(smokeClouds, ex, ey, ez, (c.x - ex) * 1.3 + (Constants.RNG.nextDouble() - 0.5) * 30, 10, (c.z - ez) * 1.3 + (Constants.RNG.nextDouble() - 0.5) * 30, 0.8 + t * 0.4, 0, false, false, 2.5);
@@ -430,8 +428,8 @@ public final class ZombieAISystem {
         return Math.sqrt(dx * dx + dz * dz);
     }
 
-    private double clampX(double x) { return Math.max(-Gfx.WORLD_BOUNDARY, Math.min(Gfx.WORLD_BOUNDARY, x)); }
-    private double clampZ(double z) { return Math.max(-Gfx.WORLD_BOUNDARY, Math.min(Gfx.WORLD_MAX_Z, z)); }
+    private double clampX(double x) { return Math.max(-Constants.WORLD_BOUNDARY, Math.min(Constants.WORLD_BOUNDARY, x)); }
+    private double clampZ(double z) { return Math.max(-Constants.WORLD_BOUNDARY, Math.min(Constants.WORLD_MAX_Z, z)); }
 
     // Blocked check - needs access to collision grid
     // This is a placeholder - Main will provide the actual implementation

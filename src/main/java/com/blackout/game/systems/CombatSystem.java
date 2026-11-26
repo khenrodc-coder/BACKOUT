@@ -6,6 +6,19 @@ import com.blackout.game.core.Constants;
 import com.blackout.game.effects.*;
 import com.blackout.game.entities.*;
 import com.blackout.game.entities.WeaponType;
+import com.blackout.game.environment.DynLight;
+
+import javafx.scene.Group;
+import javafx.scene.PointLight;
+import javafx.scene.paint.Color;
+import javafx.scene.paint.PhongMaterial;
+import javafx.scene.shape.Box;
+import javafx.scene.shape.Sphere;
+import javafx.scene.transform.Rotate;
+import javafx.scene.text.Text;
+
+import java.util.Iterator;
+import java.util.List;
 
 import java.util.Iterator;
 import java.util.List;

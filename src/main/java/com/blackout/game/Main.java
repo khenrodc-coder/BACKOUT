@@ -25,6 +25,8 @@ import com.blackout.game.systems.SpawnSystem;
 import com.blackout.game.systems.AudioManager;
 import com.blackout.game.systems.CameraController;
 import com.blackout.game.systems.AnimationController;
+import com.blackout.game.graphics.GraphicsSystem;
+import com.blackout.game.graphics.EnhancedFire;
 import com.blackout.game.world.ChunkManager;
 import com.blackout.game.world.DistrictPlan;
 import com.blackout.game.world.WorldState;
@@ -211,7 +213,9 @@ public class Main extends javafx.application.Application {
     private boolean gameOver, paused;
 
     // ---- game state, menu, save/load, map, settings (3rd update)
-    private enum Mode { MENU, NEW, LOAD }
+    private enum Mode {
+        MENU, NEW, LOAD
+    }
 
     private Stage stage;
     private StackPane rootPane;
@@ -233,7 +237,10 @@ public class Main extends javafx.application.Application {
     private double autosaveClock, exploreClock, menuTime;
 
     // ---- interaction + action transitions (4th stage)
-    /** How close the player must be to a bed (prompt and sleeping use the same number). */
+    /**
+     * How close the player must be to a bed (prompt and sleeping use the same
+     * number).
+     */
     private static final double BED_RANGE = 100;
     private final ActionLock lock = new ActionLock();
     private final InteractionSystem interactions = new InteractionSystem();
@@ -271,6 +278,7 @@ public class Main extends javafx.application.Application {
     private AudioManager audioManager;
     private CameraController cameraController;
     private AnimationController animationController;
+    private GraphicsSystem graphicsSystem;
 
     // ---- streamed downtown district (5th stage): chunks load and unload around the player, changes live in WorldState
     private final WorldState worldState = new WorldState();
@@ -304,7 +312,10 @@ public class Main extends javafx.application.Application {
         beginSession(stage, seed, Mode.MENU, null);
     }
 
-    /** Builds the whole game (world, UI, loop) for one world seed. A new Main instance is used per world. */
+    /**
+     * Builds the whole game (world, UI, loop) for one world seed. A new Main
+     * instance is used per world.
+     */
     private void beginSession(Stage st, long seed, Mode mode, SaveData save) {
         this.stage = st;
         this.worldSeed = seed;
@@ -338,9 +349,10 @@ public class Main extends javafx.application.Application {
         combatSystem = new CombatSystem(world, RNG, particles, tracers, explosions, grenadeList, smokeClouds, lights, hitMarker);
         combatSystem.setMuzzleFlash(muzzleFlash, muzzleLight, muzzleLocalY, muzzleLocalZ);
 
-        zombieAISystem = new ZombieAISystem(world, RNG, enemies, buildings, cars, roadRects,
+        zombieAISystem = new ZombieAISystem(world, enemies, buildings, cars, roadRects,
                 smokeClouds, particles,
-                e -> {},
+                e -> {
+                },
                 dmg -> damagePlayer(dmg, "Torn apart by the infected"),
                 range -> alertZombies(range),
                 () -> effThreat(),
@@ -357,13 +369,15 @@ public class Main extends javafx.application.Application {
 
         dayNightSystem = new DayNightSystem(sky, celestial, ambientLight, skyMat, voidMat, RNG);
 
-        weatherSystem = new WeatherSystem(world, RNG, particles, lights);
+        weatherSystem = new WeatherSystem(world, particles, lights);
 
         inventorySystem = new InventorySystem();
 
-        spawnSystem = new SpawnSystem(world, RNG, enemies, buildings, cars, roadRects, pickups,
-                e -> {}, // onEnemySpawned
-                p -> {}); // onPickupSpawned
+        spawnSystem = new SpawnSystem(world, enemies, buildings, cars, roadRects, pickups,
+                e -> {
+                }, // onEnemySpawned
+                p -> {
+                }); // onPickupSpawned
 
         audioManager = new AudioManager();
 
@@ -378,6 +392,11 @@ public class Main extends javafx.application.Application {
                 () -> cameraPitch,
                 () -> strafeInput,
                 amt -> shake = Math.max(shake, amt));
+
+        // Initialize graphics system
+        graphicsSystem = new GraphicsSystem(world, gameScene.getScene(),
+                buildings, enemies, cars, trees,
+                weatherSystem, dayNightSystem);
 
         registerInteractables();
         if (mode != Mode.LOAD) {
@@ -700,6 +719,7 @@ public class Main extends javafx.application.Application {
     private static final double TIME_SCALE = 2.0;   // game minutes per real second (1 day = 12 real minutes)
     private static final String[] MONTHS = {"JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST",
         "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"};
+
     private static boolean leap(int y) {
         return y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
     }
@@ -1553,7 +1573,10 @@ public class Main extends javafx.application.Application {
         return b;
     }
 
-    /** Porch, shutters / boarded windows, gutters and chimney from BuildingDetail. */
+    /**
+     * Porch, shutters / boarded windows, gutters and chimney from
+     * BuildingDetail.
+     */
     private void addHouseDetails(Building b, double bx, double bz, double fz, double w, double d, double h, int front, double rise) {
         boolean ruined = b.burning;
         if (!ruined && RNG.nextDouble() < 0.7) {
@@ -1661,14 +1684,19 @@ public class Main extends javafx.application.Application {
     }
 
     // ===================== TOWN / SUBURBS / FOREST =====================
-    /** Footprint of a house: about 4.6-6.8 m wide and 4.8-5.5 m deep, so every room fits real furniture at player scale. */
+    /**
+     * Footprint of a house: about 4.6-6.8 m wide and 4.8-5.5 m deep, so every
+     * room fits real furniture at player scale.
+     */
     private double[] houseSize() {
         return new double[]{300 + RNG.nextInt(141), 310 + RNG.nextInt(51)};
     }
 
     /**
-     * True when a house of this footprint can stand here: inside the playable area, clear of every other building, the river
-     * (including a lane for its door), the lake and, optionally, the roads. {@code margin} is the free space kept all round.
+     * True when a house of this footprint can stand here: inside the playable
+     * area, clear of every other building, the river (including a lane for its
+     * door), the lake and, optionally, the roads. {@code margin} is the free
+     * space kept all round.
      */
     private boolean houseSpotFree(double x, double z, double w, double d, double margin, boolean checkRoads) {
         if (Math.abs(x) + w / 2 > 1330 || Math.abs(z) + d / 2 > 1330) {
@@ -1796,7 +1824,10 @@ public class Main extends javafx.application.Application {
         addObs(x, z, 10 * s, 10 * s, 60, false);
     }
 
-    /** Radio / cellular towers and a line of high-voltage pylons (all from TowerFactory). */
+    /**
+     * Radio / cellular towers and a line of high-voltage pylons (all from
+     * TowerFactory).
+     */
     private void createRadioTowers() {
         int placed = 0;
         for (int t = 0; t < 600 && placed < 3; t++) {
@@ -1859,7 +1890,10 @@ public class Main extends javafx.application.Application {
         poiDefs.add(new Object[]{"Power Line", px, 300.0});
     }
 
-    /** Swaying grass patches and bushes spread over the whole map (culled by distance). */
+    /**
+     * Swaying grass patches and bushes spread over the whole map (culled by
+     * distance).
+     */
     private void createGrass() {
         final double size = 200;
         for (double cx = -1700 + size / 2; cx < 1700; cx += size) {
@@ -1881,7 +1915,10 @@ public class Main extends javafx.application.Application {
         }
     }
 
-    /** Rocks, logs, trash piles, tyres, barrels, scrap and paper scattered around. */
+    /**
+     * Rocks, logs, trash piles, tyres, barrels, scrap and paper scattered
+     * around.
+     */
     private void createDebris() {
         for (int i = 0, placed = 0; i < 400 && placed < 90; i++) {
             double x = (RNG.nextDouble() - 0.5) * 3200, z = (RNG.nextDouble() - 0.5) * 3200;
@@ -2440,35 +2477,35 @@ public class Main extends javafx.application.Application {
             }
         }
         // Animation controller update
-                animationController.setHeldItem(heldItem);
-                animationController.setPrevHeld(prevHeld);
-                animationController.setCurrentWeapon(currentWeapon);
-                animationController.setIsAiming(isAiming);
-                animationController.setCrouched(crouched);
-                animationController.setClimbing(climbing);
-                animationController.setFiring(firing);
-                animationController.setWeaponKick(weaponKick);
-                animationController.setCameraRecoil(cameraRecoil);
-                animationController.setReloadTimer(reloadTimer);
-                animationController.setReloadDur(reloadDur);
-                animationController.setThrowing(throwing);
-                animationController.setThrew(threw);
-                animationController.setThrowT(throwT);
-                animationController.setUsingMed(usingMed);
-                animationController.setMedT(medT);
-                animationController.setHitReact(hitReact);
-                animationController.setHitSide(hitSide);
-                animationController.setReachBlend(reachBlend);
-                animationController.setMuzzleLight(muzzleLight);
-                animationController.setMuzzleFlashTimer(muzzleFlashTimer);
-                animationController.update(dt, moving && !climbing, sprinting, mz < 0 ? -1 : 1);
+        animationController.setHeldItem(heldItem);
+        animationController.setPrevHeld(prevHeld);
+        animationController.setCurrentWeapon(currentWeapon);
+        animationController.setIsAiming(isAiming);
+        animationController.setCrouched(crouched);
+        animationController.setClimbing(climbing);
+        animationController.setFiring(firing);
+        animationController.setWeaponKick(weaponKick);
+        animationController.setCameraRecoil(cameraRecoil);
+        animationController.setReloadTimer(reloadTimer);
+        animationController.setReloadDur(reloadDur);
+        animationController.setThrowing(throwing);
+        animationController.setThrew(threw);
+        animationController.setThrowT(throwT);
+        animationController.setUsingMed(usingMed);
+        animationController.setMedT(medT);
+        animationController.setHitReact(hitReact);
+        animationController.setHitSide(hitSide);
+        animationController.setReachBlend(reachBlend);
+        animationController.setMuzzleLight(muzzleLight);
+        animationController.setMuzzleFlashTimer(muzzleFlashTimer);
+        animationController.update(dt, moving && !climbing, sprinting, mz < 0 ? -1 : 1);
 
-                // Sync back animation state
-                weaponKick = animationController.getWeaponKick();
-                cameraRecoil = animationController.getCameraRecoil();
-                walkPhase = animationController.getWalkPhase();
-                moveBlend = animationController.getMoveBlend();
-                swapBlend = animationController.getSwapBlend();
+        // Sync back animation state
+        weaponKick = animationController.getWeaponKick();
+        cameraRecoil = animationController.getCameraRecoil();
+        walkPhase = animationController.getWalkPhase();
+        moveBlend = animationController.getMoveBlend();
+        swapBlend = animationController.getSwapBlend();
         updateHUD();
     }
 
@@ -2550,6 +2587,7 @@ public class Main extends javafx.application.Application {
     // ===================== DOORS / INTERACT =====================
     // ---- interaction system: doors and beds are Interactables, one key uses whichever is best
     private final class DoorTarget implements Interactable {
+
         private final Building b;
 
         DoorTarget(Building b) {
@@ -2593,6 +2631,7 @@ public class Main extends javafx.application.Application {
     }
 
     private final class BedTarget implements Interactable {
+
         private final double[] bed;
 
         BedTarget(double[] bed) {
@@ -2684,7 +2723,10 @@ public class Main extends javafx.application.Application {
         return busy ? "DOORWAY BLOCKED" : null;
     }
 
-    /** Reach out, and move the door at the moment the hand touches it (checked again then, in case things changed). */
+    /**
+     * Reach out, and move the door at the moment the hand touches it (checked
+     * again then, in case things changed).
+     */
     private void startDoorInteraction(Building b) {
         String why = doorBlockReason(b);
         if (why != null) {
@@ -2713,7 +2755,10 @@ public class Main extends javafx.application.Application {
         }, null);
     }
 
-    /** Knocks the torso back and twists the head toward the nearest threat, and briefly slows the player. */
+    /**
+     * Knocks the torso back and twists the head toward the nearest threat, and
+     * briefly slows the player.
+     */
     private void triggerHitReaction() {
         hitReact = 1;
         double px = player.getTranslateX(), pz = player.getTranslateZ(), best = 450;
@@ -2997,7 +3042,10 @@ public class Main extends javafx.application.Application {
         scene.addEventFilter(KeyEvent.KEY_RELEASED, e -> keys.remove(e.getCode()));
     }
 
-    /** Single place that changes the game state; keeps the legacy paused / gameOver flags in sync. */
+    /**
+     * Single place that changes the game state; keeps the legacy paused /
+     * gameOver flags in sync.
+     */
     private void setState(GameState next) {
         state = next;
         paused = next == GameState.MENU || next == GameState.PAUSED || next == GameState.MAP || next == GameState.SETTINGS;
@@ -4419,7 +4467,10 @@ public class Main extends javafx.application.Application {
         menu.refresh(ok, info);
     }
 
-    /** Cinematic flyover: the camera slowly orbits the town while the menu is shown. */
+    /**
+     * Cinematic flyover: the camera slowly orbits the town while the menu is
+     * shown.
+     */
     private void updateMenu(double dt) {
         menuTime += dt;
         worldTime += dt;
@@ -4449,7 +4500,9 @@ public class Main extends javafx.application.Application {
         }
     }
 
-    /** Leaves the menu and starts playing. */
+    /**
+     * Leaves the menu and starts playing.
+     */
     private void beginRun(boolean fresh) {
         setState(GameState.PLAYING);
         streamNow();
@@ -4505,7 +4558,10 @@ public class Main extends javafx.application.Application {
         }
     }
 
-    /** With a saved game a brand-new world seed is used; with none, the world behind the menu is already fresh. */
+    /**
+     * With a saved game a brand-new world seed is used; with none, the world
+     * behind the menu is already fresh.
+     */
     private void startNewGame(boolean newWorld) {
         if (newWorld) {
             rebuild(Mode.NEW, new Random().nextLong(), null);
@@ -4515,7 +4571,10 @@ public class Main extends javafx.application.Application {
         }
     }
 
-    /** Builds a different world in a fresh Main instance and swaps it into the same window. */
+    /**
+     * Builds a different world in a fresh Main instance and swaps it into the
+     * same window.
+     */
     private void rebuild(Mode mode, long seed, SaveData data) {
         menu.showLoading(mode == Mode.LOAD ? "LOADING SAVED GAME..." : "GENERATING WORLD...");
         PauseTransition wait = new PauseTransition(Duration.millis(120));   // let the loading cover paint first
@@ -4594,7 +4653,9 @@ public class Main extends javafx.application.Application {
         return d;
     }
 
-    /** Writes the save file. {@code verbose} shows feedback to the player. */
+    /**
+     * Writes the save file. {@code verbose} shows feedback to the player.
+     */
     private boolean saveGame(boolean verbose) {
         if (state == GameState.MENU || state == GameState.GAME_OVER || health <= 0 || sleeping) {
             if (verbose) {
@@ -4620,7 +4681,10 @@ public class Main extends javafx.application.Application {
         }
     }
 
-    /** Restores a run. The world itself already matches the save (same seed); this puts back everything that changed. */
+    /**
+     * Restores a run. The world itself already matches the save (same seed);
+     * this puts back everything that changed.
+     */
     private void applySave(SaveData d) {
         resetRunState();
         gameMinutes = d.gameMinutes;
@@ -4712,7 +4776,10 @@ public class Main extends javafx.application.Application {
     }
 
     // ---- streamed downtown district
-    /** Loads everything within range at once (new game, loading a save): no visible pop-in on the first frame. */
+    /**
+     * Loads everything within range at once (new game, loading a save): no
+     * visible pop-in on the first frame.
+     */
     private void streamNow() {
         double px = player.getTranslateX(), pz = player.getTranslateZ();
         for (int i = 0; i < 60 && chunks.update(px, pz) > 0; i++) {
@@ -4903,7 +4970,10 @@ public class Main extends javafx.application.Application {
         return overlay;
     }
 
-    /** Puts every run variable back to the start of a fresh run (does not spawn enemies or touch the UI state). */
+    /**
+     * Puts every run variable back to the start of a fresh run (does not spawn
+     * enemies or touch the UI state).
+     */
     private void resetRunState() {
         keys.clear();
         health = 100;
@@ -5020,7 +5090,9 @@ public class Main extends javafx.application.Application {
                         Main.this::status,
                         bm -> {
                             bloodMoon = bm;
-                            for (Enemy e : enemies) e.setBlood(bm);
+                            for (Enemy e : enemies) {
+                                e.setBlood(bm);
+                            }
                         });
 
                 // Update weather
@@ -5083,6 +5155,14 @@ public class Main extends javafx.application.Application {
                 camRoll = cameraController.getCamRoll();
                 shake = cameraController.getShake();
                 currentFov = cameraController.getCurrentFov();
+
+                // Update graphics system
+                graphicsSystem.update(dt,
+                        player.getTranslateX(), player.getTranslateY(), player.getTranslateZ(),
+                        camera.getTranslateX(), camera.getTranslateY(), camera.getTranslateZ(),
+                        celestial.getTranslateX(), celestial.getTranslateY(), celestial.getTranslateZ(),
+                        enemies, weatherSystem, dayNightSystem);
+
                 if ((++mapTick & 1) == 0) {
                     drawMinimap();
                 }
