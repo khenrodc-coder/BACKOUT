@@ -243,13 +243,12 @@ public final class MuzzleFlashEnhancement {
             sparkGroup.getChildren().add(spark);
             sparkGroup.setMouseTransparent(true);
             sp.node = sparkGroup;
-                spark.setMaterial(Gfx.glow(Color.rgb(255, 220 + rng.nextInt(35), 120)));
-                spark.setTranslateX(sp.x);
-                spark.setTranslateY(sp.y);
-                spark.setTranslateZ(sp.z);
-                spark.setMouseTransparent(true);
-                sp.node = spark;
-                particleGroup.getChildren().add(spark);
+            spark.setMaterial(Gfx.glow(Color.rgb(255, 220 + rng.nextInt(35), 120)));
+            spark.setTranslateX(sp.x);
+            spark.setTranslateY(sp.y);
+            spark.setTranslateZ(sp.z);
+            spark.setMouseTransparent(true);
+            particleGroup.getChildren().add(sparkGroup);
             }
 
             // Smoke particles
@@ -264,7 +263,11 @@ public final class MuzzleFlashEnhancement {
                 sm.vy = 10 + rng.nextDouble() * 30;
                 sm.vz = (rng.nextDouble() - 0.5) * 20;
 
+                Group puffGroup = new Group();
                 Box puff = new Box(4, 4, 4);
+                puffGroup.getChildren().add(puff);
+                puffGroup.setMouseTransparent(true);
+                sm.node = puffGroup;
                 PhongMaterial mat = new PhongMaterial(Color.rgb(70, 70, 70, 0.4));
                 mat.setSpecularColor(Color.BLACK);
                 puff.setMaterial(mat);
@@ -273,8 +276,7 @@ public final class MuzzleFlashEnhancement {
                 puff.setTranslateZ(sm.z);
                 puff.setMouseTransparent(true);
                 puff.setCullFace(javafx.scene.shape.CullFace.NONE);
-                sm.node = puff;
-                particleGroup.getChildren().add(puff);
+                particleGroup.getChildren().add(puffGroup);
             }
 
             // Brass casing ejection

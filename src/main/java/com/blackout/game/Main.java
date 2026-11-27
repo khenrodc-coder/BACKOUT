@@ -29,10 +29,12 @@ import com.blackout.game.graphics.GraphicsSystem;
 import com.blackout.game.graphics.EnhancedFire;
 import com.blackout.game.world.ChunkManager;
 import com.blackout.game.world.DistrictPlan;
+import com.blackout.game.world.LocationTypes;
+import com.blackout.game.world.WorldGenerator;
 import com.blackout.game.world.WorldState;
+import com.blackout.game.ui.WorldMapView;
 import com.blackout.game.ui.MainMenu;
 import com.blackout.game.ui.SettingsPanel;
-import com.blackout.game.ui.WorldMapView;
 
 import static com.blackout.game.core.Constants.*;
 import static com.blackout.game.core.Gfx.*;
@@ -227,7 +229,7 @@ public class Main extends javafx.application.Application {
     private final SaveManager saves = SaveManager.standard();
     private MainMenu menu;
     private SettingsPanel settingsPanel;
-    private WorldMapView worldMap;
+    private WorldMapView worldMapView;
     private SubScene gameScene;
     private Bloom bloom;
     private Region introFade;
@@ -279,6 +281,10 @@ public class Main extends javafx.application.Application {
     private CameraController cameraController;
     private AnimationController animationController;
     private GraphicsSystem graphicsSystem;
+
+    // ---- Phase 3: World generation
+    private WorldGenerator.WorldMap worldGenMap;
+    private int worldGenTick = 0;
 
     // ---- streamed downtown district (5th stage): chunks load and unload around the player, changes live in WorldState
     private final WorldState worldState = new WorldState();
@@ -393,19 +399,6 @@ public class Main extends javafx.application.Application {
                 () -> strafeInput,
                 amt -> shake = Math.max(shake, amt));
 
-        // Initialize graphics system
-        graphicsSystem = new GraphicsSystem(world, gameScene.getScene(),
-                buildings, enemies, cars, trees,
-                weatherSystem, dayNightSystem);
-
-        registerInteractables();
-        if (mode != Mode.LOAD) {
-            spawnInitialZombies();
-        }
-        if (mode == Mode.MENU) {
-            spawnMenuZombies();
-        }
-
         StackPane root = new StackPane();
         rootPane = root;
         root.setFocusTraversable(true);
@@ -420,6 +413,22 @@ public class Main extends javafx.application.Application {
         bloom = new Bloom(0.78);
         bloom.setInput(new ColorAdjust(0.0, 0.12, 0.03, 0.14));
         gameScene.setEffect(POST_FX && settings.quality.bloom ? bloom : null);
+
+        // Initialize graphics system
+        graphicsSystem = new GraphicsSystem(world, gameScene,
+                buildings, enemies, cars, trees,
+                weatherSystem, dayNightSystem);
+
+        // Initialize world generator and world map (Phase 3)
+        worldGenMap = new WorldGenerator.WorldMap(worldSeed);
+
+        registerInteractables();
+        if (mode != Mode.LOAD) {
+            spawnInitialZombies();
+        }
+        if (mode == Mode.MENU) {
+            spawnMenuZombies();
+        }
 
         VBox hud = createHUD();
         Group crosshair = createCrosshair();
@@ -507,9 +516,9 @@ public class Main extends javafx.application.Application {
         pauseOverlay = createPauseOverlay();
         root.getChildren().addAll(gameOverOverlay, pauseOverlay);
 
-        worldMap = new WorldMapView(roadRects, buildings, new double[]{LAKE_X, LAKE_Z, LAKE_RX, LAKE_RZ}, RIVER_Z, 100, worldSeed);
+        worldMapView = new WorldMapView(roadRects, buildings, new double[]{LAKE_X, LAKE_Z, LAKE_RX, LAKE_RZ}, RIVER_Z, 100, worldSeed);
         for (Object[] p : poiDefs) {
-            worldMap.addPoi((String) p[0], (Double) p[1], (Double) p[2]);
+            worldMapView.addPoi((String) p[0], (Double) p[1], (Double) p[2]);
         }
         settingsPanel = new SettingsPanel(settings, this::applySettings, this::closeSettings);
         menu = new MainMenu(new MainMenu.Actions() {
@@ -533,7 +542,7 @@ public class Main extends javafx.application.Application {
                 Platform.exit();
             }
         });
-        root.getChildren().addAll(worldMap, menu, settingsPanel);
+        root.getChildren().addAll(worldMapView, menu, settingsPanel);
         hudNodes.addAll(List.of(hud, crosshair, hitMarker, miniMap, viewButton, hotbar, timeBox, promptText, banner));
 
         StackPane.setAlignment(hud, Pos.TOP_LEFT);
@@ -4382,8 +4391,8 @@ public class Main extends javafx.application.Application {
         for (SmokeCloud sm : smokeClouds) {
             mgc.fillOval(sm.x - sm.r - px, -(sm.z + sm.r - pz), sm.r * 2, sm.r * 2);
         }
-        if (worldMap != null && worldMap.hasWaypoint()) {
-            double dx = worldMap.waypointX() - px, dz = worldMap.waypointZ() - pz, d = Math.hypot(dx, dz), lim = range * 0.92;
+        if (worldMapView != null && worldMapView.hasWaypoint()) {
+            double dx = worldMapView.waypointX() - px, dz = worldMapView.waypointZ() - pz, d = Math.hypot(dx, dz), lim = range * 0.92;
             if (d > lim) {
                 dx *= lim / d;
                 dz *= lim / d;
@@ -4437,7 +4446,7 @@ public class Main extends javafx.application.Application {
         playerShadow.setVisible(false);
         pauseOverlay.setVisible(false);
         gameOverOverlay.setVisible(false);
-        worldMap.setVisible(false);
+        worldMapView.setVisible(false);
         settingsPanel.setVisible(false);
         introFade.setVisible(false);
         gameMinutes = 19 * 60 + 20;          // dusk behind the menu
@@ -4508,7 +4517,7 @@ public class Main extends javafx.application.Application {
         streamNow();
         menu.setVisible(false);
         settingsPanel.setVisible(false);
-        worldMap.setVisible(false);
+        worldMapView.setVisible(false);
         pauseOverlay.setVisible(false);
         gameOverOverlay.setVisible(false);
         setHudVisible(true);
@@ -4519,7 +4528,7 @@ public class Main extends javafx.application.Application {
         lastClockMin = -1;
         autosaveClock = 0;
         exploreClock = 0;
-        worldMap.reveal(player.getTranslateX(), player.getTranslateZ(), 260);
+        worldMapView.reveal(player.getTranslateX(), player.getTranslateZ(), 260);
         updateCamera(1.0);
         updateHUD();
         introFade.setVisible(true);
@@ -4635,11 +4644,11 @@ public class Main extends javafx.application.Application {
         }
         d.openDoorIds.addAll(worldState.openDoorIds());
         d.takenIds.addAll(worldState.takenIds());
-        d.explored = worldMap.exportExplored();
-        d.poiFound = worldMap.exportPoi();
-        d.hasWaypoint = worldMap.hasWaypoint();
-        d.waypointX = worldMap.waypointX();
-        d.waypointZ = worldMap.waypointZ();
+        d.explored = worldMapView.exportExplored();
+        d.poiFound = worldMapView.exportPoi();
+        d.hasWaypoint = worldMapView.hasWaypoint();
+        d.waypointX = worldMapView.waypointX();
+        d.waypointZ = worldMapView.waypointZ();
         for (Enemy e : enemies) {
             if (e.alive && e.hiddenTimer <= 0 && d.enemies.size() < 300) {
                 d.enemies.add(new double[]{e.origType, e.model.getTranslateX(), e.model.getTranslateZ(), e.health, e.yaw});
@@ -4730,10 +4739,10 @@ public class Main extends javafx.application.Application {
             b.doorAmt = b.doorOpen ? 1 : 0;
             b.doorRot.setAngle(90 * b.front * b.doorAmt);
         }
-        worldMap.resetExploration();
-        worldMap.importExplored(d.explored);
-        worldMap.importPoi(d.poiFound);
-        worldMap.setWaypoint(d.hasWaypoint, d.waypointX, d.waypointZ);
+        worldMapView.resetExploration();
+        worldMapView.importExplored(d.explored);
+        worldMapView.importPoi(d.poiFound);
+        worldMapView.setWaypoint(d.hasWaypoint, d.waypointX, d.waypointZ);
         for (Enemy e : enemies) {
             world.getChildren().remove(e.model);
         }
@@ -4761,7 +4770,7 @@ public class Main extends javafx.application.Application {
         exploreClock -= dt;
         if (exploreClock <= 0) {
             exploreClock = 0.5;
-            for (String n : worldMap.reveal(player.getTranslateX(), player.getTranslateZ(), 260)) {
+            for (String n : worldMapView.reveal(player.getTranslateX(), player.getTranslateZ(), 260)) {
                 showBanner("DISCOVERED: " + n.toUpperCase(), Color.GOLD);
                 status("NEW LOCATION: " + n, Color.GOLD);
             }
@@ -4863,15 +4872,15 @@ public class Main extends javafx.application.Application {
     private void openMap() {
         setState(GameState.MAP);
         firing = false;
-        worldMap.reveal(player.getTranslateX(), player.getTranslateZ(), 260);
-        worldMap.setPlayer(player.getTranslateX(), player.getTranslateZ(), smoothedYaw);
-        worldMap.setVisible(true);
-        worldMap.toFront();
-        worldMap.redraw();
+        worldMapView.reveal(player.getTranslateX(), player.getTranslateZ(), 260);
+        worldMapView.setPlayer(player.getTranslateX(), player.getTranslateZ(), smoothedYaw);
+        worldMapView.setVisible(true);
+        worldMapView.toFront();
+        worldMapView.redraw();
     }
 
     private void closeMap() {
-        worldMap.setVisible(false);
+        worldMapView.setVisible(false);
         setState(GameState.PLAYING);
         rootPane.requestFocus();
     }
@@ -5050,7 +5059,7 @@ public class Main extends javafx.application.Application {
         resetRunState();
         worldState.clear();
         chunks.unloadAll();
-        worldMap.resetExploration();
+        worldMapView.resetExploration();
         setState(GameState.PLAYING);
         gameOverOverlay.setVisible(false);
         pauseOverlay.setVisible(false);
@@ -5061,6 +5070,16 @@ public class Main extends javafx.application.Application {
         showBanner("SURVIVE THE NIGHT", Color.GOLD);
         autosaveClock = 0;
         rootPane.requestFocus();
+    }
+
+    private void updateWorldGeneration(double playerX, double playerZ) {
+        // Check if player is near region boundaries and generate content
+        int cx = (int) Math.floor(playerX / DistrictPlan.CHUNK);
+        int cz = (int) Math.floor(playerZ / DistrictPlan.CHUNK);
+
+        // Could trigger generation of nearby chunks here if needed
+        // For now, the ChunkManager handles DistrictPlan chunks, and WorldGenerator
+        // provides static world map data for the UI
     }
 
     private void startGameLoop() {
@@ -5099,7 +5118,10 @@ public class Main extends javafx.application.Application {
                 weatherSystem.update(dt, player.getTranslateX(), player.getTranslateZ(), camera.getTranslateY());
 
                 // Update survival system
-                survivalSystem.update(dt, sprintingNow, sleeping, grounded);
+                double ambientTemp = 20.0; // Default ambient temperature
+                boolean inWater = false; // Would check weather/player position
+                boolean nearFire = false; // Would check nearby fires
+                survivalSystem.update(dt, sprintingNow, sleeping, grounded, ambientTemp, inWater, nearFire, bloodMoon);
                 health = survivalSystem.getHealth();
                 stamina = survivalSystem.getStamina();
 
@@ -5167,6 +5189,7 @@ public class Main extends javafx.application.Application {
                     drawMinimap();
                 }
                 chunks.update(player.getTranslateX(), player.getTranslateZ());
+
                 if (state == GameState.PLAYING && health > 0) {
                     tickMapAndAutosave(dt);
                 }

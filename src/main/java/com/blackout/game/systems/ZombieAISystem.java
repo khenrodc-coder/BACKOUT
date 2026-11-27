@@ -11,6 +11,7 @@ import com.blackout.game.effects.SmokeCloud;
 import com.blackout.game.effects.Particle;
 import com.blackout.game.entities.Rig;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -20,9 +21,44 @@ import javafx.scene.paint.PhongMaterial;
 
 /**
  * Handles all zombie AI logic: spawning, movement, state machines, attacks, blood moon.
- * Extracted from Main.java to reduce god-class size.
+ * Phase 6 enhancements: sound perception, search behavior, horde grouping, door breaking.
  */
 public final class ZombieAISystem {
+
+    // Sound event class
+    public static final class SoundEvent {
+        public final double x, z;
+        public final double radius;
+        public final double intensity; // 0-1
+        public final long timestamp;
+        public final SoundType type;
+
+        public SoundEvent(double x, double z, double radius, double intensity, SoundType type) {
+            this.x = x; this.z = z; this.radius = radius; this.intensity = intensity;
+            this.timestamp = System.currentTimeMillis();
+            this.type = type;
+        }
+
+        public enum SoundType {
+            GUNSHOT(1200, 1.0),
+            SPRINT(300, 0.6),
+            DOOR_OPEN(200, 0.5),
+            GLASS_BREAK(400, 0.7),
+            EXPLOSION(2000, 1.0),
+            FOOTSTEP(80, 0.3),
+            RELOAD(150, 0.4),
+            MELEE_HIT(100, 0.3),
+            ZOMBIE_MOAN(500, 0.8);
+
+            public final double baseRadius;
+            public final double baseIntensity;
+
+            SoundType(double baseRadius, double baseIntensity) {
+                this.baseRadius = baseRadius;
+                this.baseIntensity = baseIntensity;
+            }
+        }
+    }
 
     private final Group world;
     private final List<Enemy> enemies;
@@ -42,6 +78,19 @@ public final class ZombieAISystem {
     private final java.util.function.BooleanSupplier isCrouched;
     private final java.util.function.BooleanSupplier isSprinting;
     private final java.util.function.BooleanSupplier isGrounded;
+
+    // Sound system
+    private final List<SoundEvent> activeSounds = new ArrayList<>();
+    private final List<SoundEvent> soundHistory = new ArrayList<>();
+
+    // Search/investigation
+    private final List<InvestigationPoint> investigationPoints = new ArrayList<>();
+
+    // Horde system
+    private final List<Horde> hordes = new ArrayList<>();
+
+    // Door breaking
+    private final List<DoorBreach> doorBreaches = new ArrayList<>();
 
     private double spawnClock = 3;
     private double survivalTime = 0;
@@ -83,6 +132,194 @@ public final class ZombieAISystem {
         this.isSprinting = isSprinting;
         this.isGrounded = isGrounded;
     }
+
+    // ===================== SOUND SYSTEM =====================
+
+    /**
+     * Register a sound event that zombies can hear.
+     */
+    public void registerSound(double x, double z, SoundEvent.SoundType type) {
+        SoundEvent se = new SoundEvent(x, z, type.baseRadius, type.baseIntensity, type);
+        activeSounds.add(se);
+        soundHistory.add(se);
+        if (soundHistory.size() > 100) soundHistory.remove(0);
+    }
+
+    /**
+     * Register a sound with custom radius/intensity.
+     */
+    public void registerSound(double x, double z, double radius, double intensity, SoundEvent.SoundType type) {
+        SoundEvent se = new SoundEvent(x, z, radius, intensity, type);
+        activeSounds.add(se);
+        soundHistory.add(se);
+    }
+
+    // ===================== INVESTIGATION POINTS =====================
+
+    public static final class InvestigationPoint {
+        public final double x, z;
+        public final double priority;
+        public final long created;
+        public int investigators = 0;
+        public boolean resolved = false;
+
+        public InvestigationPoint(double x, double z, double priority) {
+            this.x = x; this.z = z; this.priority = priority;
+            this.created = System.currentTimeMillis();
+        }
+    }
+
+    private void addInvestigationPoint(double x, double z, double priority) {
+        investigationPoints.add(new InvestigationPoint(x, z, priority));
+        if (investigationPoints.size() > 50) investigationPoints.remove(0);
+    }
+
+    // ===================== HORDE SYSTEM =====================
+
+    public static final class Horde {
+        public double centerX, centerZ;
+        public final List<Enemy> members = new ArrayList<>();
+        public double targetX, targetZ;
+        public long lastUpdate;
+        public int id;
+
+        public Horde(int id) {
+            this.id = id;
+            this.lastUpdate = System.currentTimeMillis();
+        }
+
+        public void updateCenter() {
+            if (members.isEmpty()) return;
+            double sumX = 0, sumZ = 0;
+            for (Enemy e : members) {
+                sumX += e.model.getTranslateX();
+                sumZ += e.model.getTranslateZ();
+            }
+            centerX = sumX / members.size();
+            centerZ = sumZ / members.size();
+        }
+    }
+
+    private void updateHordes(double dt) {
+        // Merge nearby zombies into hordes
+        for (Enemy e : enemies) {
+            if (!e.alive || e.spawnTimer > 0 || e.hiddenTimer > 0) continue;
+
+            Horde bestHorde = null;
+            double bestDist = 150; // Horde formation radius
+
+            for (Horde h : hordes) {
+                double dist = Math.hypot(e.model.getTranslateX() - h.centerX, e.model.getTranslateZ() - h.centerZ);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestHorde = h;
+                }
+            }
+
+            if (bestHorde != null) {
+                if (!bestHorde.members.contains(e)) {
+                    bestHorde.members.add(e);
+                }
+            } else {
+                // Create new horde if enough zombies nearby
+                int nearby = 0;
+                for (Enemy other : enemies) {
+                    if (other == e || !other.alive) continue;
+                    double d = Math.hypot(e.model.getTranslateX() - other.model.getTranslateX(),
+                            e.model.getTranslateZ() - other.model.getTranslateZ());
+                    if (d < 150) nearby++;
+                }
+                if (nearby >= 2) {
+                    Horde h = new Horde(hordes.size());
+                    h.members.add(e);
+                    h.updateCenter();
+                    hordes.add(h);
+                }
+            }
+        }
+
+        // Clean up empty hordes
+        hordes.removeIf(h -> h.members.isEmpty() || h.members.stream().allMatch(e -> !e.alive));
+
+        // Update horde centers and apply group behavior
+        for (Horde h : hordes) {
+            h.updateCenter();
+            if (h.members.size() < 3) continue; // Only large hordes have group behavior
+
+            // Horde shares target if one member sees player
+            Enemy leader = null;
+            for (Enemy m : h.members) {
+                if (m.state == com.blackout.game.core.Constants.S_CHASE) {
+                    leader = m;
+                    break;
+                }
+            }
+
+            if (leader != null) {
+                h.targetX = leader.model.getTranslateX();
+                h.targetZ = leader.model.getTranslateZ();
+                // Other members follow leader
+                for (Enemy m : h.members) {
+                    if (m != leader && m.state != com.blackout.game.core.Constants.S_CHASE) {
+                        m.state = com.blackout.game.core.Constants.S_CHASE;
+                        m.lostTimer = 7;
+                    }
+                }
+            }
+        }
+    }
+
+    // ===================== DOOR BREACHING =====================
+
+    public static final class DoorBreach {
+        public final Building building;
+        public final double doorX, doorZ;
+        public double progress = 0; // 0-100
+        public final List<Enemy> attackers = new ArrayList<>();
+        public long started;
+
+        public DoorBreach(Building b, double dx, double dz) {
+            this.building = b;
+            this.doorX = dx;
+            this.doorZ = dz;
+            this.started = System.currentTimeMillis();
+        }
+    }
+
+    private void updateDoorBreaches(double dt) {
+        for (Iterator<DoorBreach> it = doorBreaches.iterator(); it.hasNext();) {
+            DoorBreach db = it.next();
+            // Remove dead attackers
+            db.attackers.removeIf(e -> !e.alive);
+
+            if (db.attackers.isEmpty()) {
+                it.remove();
+                continue;
+            }
+
+            // Progress based on number of attackers and zombie type
+            double breachRate = db.attackers.stream().mapToDouble(e -> {
+                return switch (e.type) {
+                    case com.blackout.game.core.Constants.Z_TANK -> 15;
+                    case com.blackout.game.core.Constants.Z_RUNNER -> 8;
+                    default -> 5;
+                };
+            }).sum();
+
+            db.progress += breachRate * dt;
+
+            if (db.progress >= 100) {
+                // Door breaks
+                db.building.doorOpen = true;
+                db.building.doorAmt = 1;
+                if (db.building.doorRot != null) db.building.doorRot.setAngle(90 * db.building.front);
+                if (db.building.doorObs != null) db.building.doorObs.active = false;
+                it.remove();
+            }
+        }
+    }
+
+    // ===================== PUBLIC API =====================
 
     public void setStaticBuildingCount(int count) {
         this.staticBuildingCount = count;
@@ -256,10 +493,58 @@ public final class ZombieAISystem {
         double baseSpeed = 62 + getEffThreat.getAsDouble() * 3.5;
         boolean reachable = getFeetY.getAsDouble() > Constants.GROUND_Y - 55;
 
+        // Update sound system
+        updateSounds(dt);
+        // Update hordes
+        updateHordes(dt);
+        // Update door breaches
+        updateDoorBreaches(dt);
+        // Clean up old investigation points
+        investigationPoints.removeIf(ip -> System.currentTimeMillis() - ip.created > 30000 || ip.resolved);
+
         for (Iterator<Enemy> it = enemies.iterator(); it.hasNext();) {
             Enemy e = it.next();
             double ex = e.model.getTranslateX(), ez = e.model.getTranslateZ();
             double dx = px - ex, dz = pz - ez, dist = Math.sqrt(dx * dx + dz * dz);
+
+            // Sound perception
+            if (e.state != com.blackout.game.core.Constants.S_CHASE) {
+                double bestSoundIntensity = 0;
+                SoundEvent bestSound = null;
+                for (SoundEvent se : activeSounds) {
+                    double sd = Math.hypot(ex - se.x, ez - se.z);
+                    if (sd <= se.radius) {
+                        double intensity = se.intensity * (1 - sd / se.radius);
+                        if (intensity > bestSoundIntensity) {
+                            bestSoundIntensity = intensity;
+                            bestSound = se;
+                        }
+                    }
+                }
+
+                if (bestSound != null && bestSoundIntensity > 0.3) {
+                    // Heard something - investigate
+                    e.alert = Math.max(e.alert, 3 * bestSoundIntensity);
+                    addInvestigationPoint(bestSound.x, bestSound.z, bestSoundIntensity * 10);
+                }
+
+                // Check investigation points
+                if (e.state == com.blackout.game.core.Constants.S_IDLE || e.state == com.blackout.game.core.Constants.S_WANDER) {
+                    for (InvestigationPoint ip : investigationPoints) {
+                        if (ip.investigators >= 3) continue; // Max 3 investigators
+                        double ipDist = Math.hypot(ex - ip.x, ez - ip.z);
+                        if (ipDist < 200 && ip.priority > 5) {
+                            ip.investigators++;
+                            e.wx = ip.x;
+                            e.wz = ip.z;
+                            e.state = com.blackout.game.core.Constants.S_WANDER;
+                            e.wanderT = 10;
+                            break;
+                        }
+                    }
+                }
+            }
+
             if (!e.alive) {
                 e.deathTime += dt;
                 double fp = Math.min(1, e.deathTime / 0.55);
@@ -447,5 +732,13 @@ public final class ZombieAISystem {
     private void emit(List<SmokeCloud> clouds, double x, double y, double z, double vx, double vy, double vz, double life,
             double gravity, boolean bounce, boolean blood, double grow) {
         // Placeholder
+    }
+
+    // ===================== SOUND UPDATE =====================
+
+    private void updateSounds(double dt) {
+        long now = System.currentTimeMillis();
+        // Remove sounds older than 10 seconds
+        activeSounds.removeIf(se -> now - se.timestamp > 10000);
     }
 }

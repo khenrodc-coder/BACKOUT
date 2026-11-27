@@ -12,7 +12,7 @@ import com.blackout.game.environment.TreeFactory;
 import java.util.List;
 
 import javafx.scene.Group;
-import javafx.scene.Scene;
+import javafx.scene.SubScene;
 import javafx.scene.paint.Color;
 
 /**
@@ -28,7 +28,7 @@ import javafx.scene.paint.Color;
 public final class GraphicsSystem {
 
     private final Group world;
-    private final Scene scene;
+    private final SubScene subScene;
 
     // Sub-systems
     private final ShadowMap shadowMap;
@@ -52,12 +52,12 @@ public final class GraphicsSystem {
     public enum Quality { LOW, MEDIUM, HIGH, ULTRA }
     private Quality quality = Quality.HIGH;
 
-    public GraphicsSystem(Group world, Scene scene,
+    public GraphicsSystem(Group world, SubScene subScene,
             List<Building> buildings, List<Enemy> enemies,
             List<Car> cars, List<TreeFactory.Tree> trees,
             WeatherSystem weather, DayNightSystem dayNight) {
         this.world = world;
-        this.scene = scene;
+        this.subScene = subScene;
 
         // Initialize sub-systems
         this.shadowMap = new ShadowMap(world, Constants.RNG, buildings, enemies, cars, trees);
@@ -93,7 +93,7 @@ public final class GraphicsSystem {
         // Update blood moon effects
         if (bloodMoonEnabled) {
             bloodMoonEffects.update(dt, playerX, playerY, playerZ, enemies, dayNight != null && dayNight.isBloodMoon());
-            bloodMoonEffects.applyToScene(scene);
+            bloodMoonEffects.applyToScene(subScene);
         }
 
         // Update enhanced fire

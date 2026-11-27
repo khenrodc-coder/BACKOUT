@@ -14,6 +14,7 @@ import javafx.scene.paint.PhongMaterial;
 import javafx.scene.shape.Box;
 import javafx.scene.shape.Cylinder;
 import javafx.scene.shape.Sphere;
+import javafx.scene.transform.Rotate;
 
 /**
  * Bullet impact effects system with:
@@ -150,7 +151,7 @@ public final class ImpactEffects {
                 continue;
             }
             double alpha = d.life / d.maxLife;
-            PhongMaterial mat = (PhongMaterial) d.node.getChildren().get(0).getMaterial();
+            PhongMaterial mat = (PhongMaterial) ((javafx.scene.shape.Shape3D) d.node.getChildren().get(0)).getMaterial();
             Color c = mat.getDiffuseColor();
             mat.setDiffuseColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), alpha * 0.7));
         }
@@ -246,9 +247,12 @@ public final class ImpactEffects {
                 box.setTranslateY(p.y);
                 box.setTranslateZ(p.z);
                 box.setMouseTransparent(true);
-                p.node = box;
+                Group boxGroup = new Group();
+                boxGroup.getChildren().add(box);
+                boxGroup.setMouseTransparent(true);
+                p.node = boxGroup;
                 particles.add(p);
-                root.getChildren().add(box);
+                root.getChildren().add(boxGroup);
             }
         }
 
@@ -280,7 +284,7 @@ public final class ImpactEffects {
                 p.node.setTranslateZ(p.z);
 
                 double alpha = p.life / p.maxLife;
-                PhongMaterial mat = (PhongMaterial) p.node.getMaterial();
+                PhongMaterial mat = (PhongMaterial) ((javafx.scene.shape.Shape3D) p.node.getChildren().get(0)).getMaterial();
                 Color c = mat.getDiffuseColor();
                 mat.setDiffuseColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), alpha));
             }

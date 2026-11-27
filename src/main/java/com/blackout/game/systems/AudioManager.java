@@ -1,7 +1,7 @@
 package com.blackout.game.systems;
 
 import com.blackout.game.entities.WeaponType;
-
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -92,27 +92,54 @@ public final class AudioManager {
         loadMusic("game_over", "music/game_over.mp3");
     }
 
-    private void loadSfx(String name, String path) {
-        try {
-            AudioClip clip = new AudioClip(getClass().getResource(path).toExternalForm());
-            soundEffects.put(name, clip);
-        } catch (Exception e) {
-            // Sound file not found - create silent placeholder
-            soundEffects.put(name, new AudioClip(getClass().getResource("sounds/silent.wav").toExternalForm()));
-        }
-    }
+    
+private void loadSfx(String name, String path) {
+    try {
+        URL resource = AudioManager.class.getResource("/" + path);
 
-    private void loadMusic(String name, String path) {
-        try {
-            Media media = new Media(getClass().getResource(path).toExternalForm());
-            MediaPlayer player = new MediaPlayer(media);
-            player.setCycleCount(MediaPlayer.INDEFINITE);
-            player.setVolume(musicVolume * masterVolume);
-            musicTracks.put(name, player);
-        } catch (Exception e) {
-            // Music file not found
+        if (resource == null) {
+            System.err.println(
+                "[AUDIO WARNING] Missing sound: /" + path
+            );
+            return;
         }
+
+        AudioClip clip = new AudioClip(resource.toExternalForm());
+        soundEffects.put(name, clip);
+
+    } catch (Exception e) {
+        System.err.println(
+            "[AUDIO ERROR] Failed to load " + name + ": " + e.getMessage()
+        );
     }
+}
+
+private void loadMusic(String name, String path) {
+    try {
+        URL resource = AudioManager.class.getResource("/" + path);
+
+        if (resource == null) {
+            System.err.println(
+                "[MUSIC WARNING] Missing music: /" + path
+            );
+            return;
+        }
+
+        Media media = new Media(resource.toExternalForm());
+
+        MediaPlayer player = new MediaPlayer(media);
+        player.setCycleCount(MediaPlayer.INDEFINITE);
+        player.setVolume(musicVolume * masterVolume);
+
+        musicTracks.put(name, player);
+
+    } catch (Exception e) {
+        System.err.println(
+            "[MUSIC ERROR] Failed to load " + name + ": " + e.getMessage()
+        );
+    }
+}
+
 
     // ===================== PLAYBACK =====================
     public void playSfx(String name) {

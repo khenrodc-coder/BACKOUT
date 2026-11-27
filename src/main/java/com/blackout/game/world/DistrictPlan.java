@@ -121,7 +121,7 @@ public final class DistrictPlan {
         return mix(seed, cx, cz);
     }
 
-    private static long mix(long seed, int cx, int cz) {
+    public static long mix(long seed, int cx, int cz) {
         long h = seed * 0x9E3779B97F4A7C15L;
         h ^= cx * 0xC2B2AE3D27D4EB4FL;
         h = Long.rotateLeft(h, 31) * 0x165667B19E3779F9L;

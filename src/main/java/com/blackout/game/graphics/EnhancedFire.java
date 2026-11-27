@@ -157,7 +157,7 @@ public final class EnhancedFire {
                 e.node.setTranslateY(e.node.getTranslateY() + e.vy * dt);
                 e.node.setTranslateZ(e.node.getTranslateZ() + e.vz * dt);
                 double alpha = e.life / e.maxLife;
-                PhongMaterial mat = (PhongMaterial) e.node.getChildren().get(0).getMaterial();
+                PhongMaterial mat = (PhongMaterial) ((javafx.scene.shape.Shape3D) e.node.getChildren().get(0)).getMaterial();
                 mat.setDiffuseColor(Color.rgb(255, (int)(120 * alpha), 30, alpha));
             }
 
@@ -177,7 +177,7 @@ public final class EnhancedFire {
                 s.node.setScaleY(s.node.getScaleY() + dt * 0.3);
                 s.node.setScaleZ(s.node.getScaleZ() + dt * 0.3);
                 double alpha = s.life / s.maxLife;
-                PhongMaterial mat = (PhongMaterial) s.node.getChildren().get(0).getMaterial();
+                PhongMaterial mat = (PhongMaterial) ((javafx.scene.shape.Shape3D) s.node.getChildren().get(0)).getMaterial();
                 mat.setDiffuseColor(Color.rgb(70, 70, 70, alpha * 0.4));
             }
 
@@ -227,7 +227,6 @@ public final class EnhancedFire {
             ember.setTranslateY(y - 10 * scale);
             ember.setTranslateZ(z + (rng.nextDouble() - 0.5) * 14 * scale);
             ember.setMouseTransparent(true);
-            e.node = ember;
 
             localEmbers.add(e);
             emberGroup.getChildren().add(ember);

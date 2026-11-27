@@ -21,11 +21,17 @@ public final class TreeFactory {
         public final Group node = new Group();
         public final Rotate sway;
         public final double phase, strength;
+        public final double scale;
 
-        Tree(double px, double py, double pz, double phase, double strength) {
+        Tree(double px, double py, double pz, double phase, double strength, double scale) {
             sway = new Rotate(0, px, py, pz, new Point3D(1, 0, 0.6));
             this.phase = phase;
             this.strength = strength;
+            this.scale = scale;
+        }
+
+        public double getScale() {
+            return scale;
         }
 
         public void sway(double t) {
@@ -48,7 +54,7 @@ public final class TreeFactory {
 
     public static Tree create(int species, double s, double x, double z, double gy, Random rn) {
         double top = species == PINE ? 76 * s : species == DEAD ? 70 * s : 62 * s;
-        Tree t = new Tree(x, gy - top, z, rn.nextDouble() * 6.28, species == PINE ? 1.2 : species == DEAD ? 0.6 : 1.8);
+        Tree t = new Tree(x, gy - top, z, rn.nextDouble() * 6.28, species == PINE ? 1.2 : species == DEAD ? 0.6 : 1.8, s);
         Group g = t.node;
         Group canopy = new Group();
         canopy.getTransforms().add(t.sway);
