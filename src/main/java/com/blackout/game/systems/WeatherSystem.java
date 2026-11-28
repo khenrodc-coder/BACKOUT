@@ -36,13 +36,18 @@ public final class WeatherSystem {
     private final List<Particle> particles;
     private final List<DynLight> lights;
 
-    // Rain particles
-    private final java.util.List<Particle> rainParticles = new java.util.ArrayList<>();
+    // Rain particle pool - reuse particles instead of allocating new ones
+    private final java.util.List<Particle> rainParticlePool = new java.util.ArrayList<>();
+    private final java.util.List<Particle> activeRainParticles = new java.util.ArrayList<>();
 
     public WeatherSystem(Group world, List<Particle> particles, List<DynLight> lights) {
         this.world = world;
         this.particles = particles;
         this.lights = lights;
+        // Pre-allocate pool
+        for (int i = 0; i < 500; i++) {
+            rainParticlePool.add(new Particle());
+        }
     }
 
     public void update(double dt, double playerX, double playerZ, double cameraY) {
@@ -108,15 +113,30 @@ public final class WeatherSystem {
         }
     }
 
-    private void spawnRainDrop(double x, double y, double z) {
-        if (rainParticles.size() > 2000) return;
+    private Particle obtainRainParticle() {
+        // Reuse from pool if available, otherwise grow the active list
+        if (!rainParticlePool.isEmpty()) {
+            Particle p = rainParticlePool.remove(rainParticlePool.size() - 1);
+            p.node = new Box(0.1, 0.5, 0.1);
+            p.node.setMaterial(Mats.WATER_MAT);
+            p.node.setMouseTransparent(true);
+            return p;
+        }
+        // Fallback: create new and add to active list for cleanup
         Particle p = new Particle();
         p.node = new Box(0.1, 0.5, 0.1);
         p.node.setMaterial(Mats.WATER_MAT);
+        p.node.setMouseTransparent(true);
+        activeRainParticles.add(p);
+        return p;
+    }
+
+    private void spawnRainDrop(double x, double y, double z) {
+        if (activeRainParticles.size() + rainParticlePool.size() > 2000) return;
+        Particle p = obtainRainParticle();
         p.node.setTranslateX(x);
         p.node.setTranslateY(y);
         p.node.setTranslateZ(z);
-        p.node.setMouseTransparent(true);
         p.vx = windStrength * 10;
         p.vy = -300 - Constants.RNG.nextDouble() * 100;
         p.vz = windStrength * 10;
@@ -124,17 +144,21 @@ public final class WeatherSystem {
         p.maxLife = 2.0;
         p.gravity = 0;
         p.moving = true;
-        rainParticles.add(p);
+        activeRainParticles.add(p);
         world.getChildren().add(p.node);
     }
 
     private void updateRainParticles(double dt) {
-        for (java.util.Iterator<Particle> it = rainParticles.iterator(); it.hasNext();) {
-            Particle p = it.next();
+        // Update and recycle rain particles
+        for (int i = activeRainParticles.size() - 1; i >= 0; i--) {
+            Particle p = activeRainParticles.get(i);
             p.life -= dt;
             if (p.life <= 0 || p.node.getTranslateY() < 108) {
                 world.getChildren().remove(p.node);
-                it.remove();
+                // Return to pool for reuse
+                p.node = null;
+                activeRainParticles.remove(i);
+                rainParticlePool.add(p);
             } else {
                 p.node.setTranslateX(p.node.getTranslateX() + p.vx * dt);
                 p.node.setTranslateY(p.node.getTranslateY() + p.vy * dt);

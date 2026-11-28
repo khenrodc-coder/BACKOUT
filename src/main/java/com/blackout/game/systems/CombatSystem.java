@@ -7,6 +7,7 @@ import com.blackout.game.effects.*;
 import com.blackout.game.entities.*;
 import com.blackout.game.entities.WeaponType;
 import com.blackout.game.environment.DynLight;
+import com.blackout.game.systems.AudioManager;
 
 import javafx.scene.Group;
 import javafx.scene.PointLight;
@@ -40,6 +41,7 @@ import javafx.scene.text.Text;
 public final class CombatSystem {
 
     private final Group world;
+    private final AudioManager audioManager;
 
     // Weapon state (owned by Main but managed here)
     private WeaponType currentWeapon = WeaponType.PISTOL;
@@ -94,8 +96,9 @@ public final class CombatSystem {
             List<Particle> particles, List<Tracer> tracers,
             List<Explosion> explosions, List<Grenade> grenadeList,
             List<SmokeCloud> smokeClouds, List<DynLight> lights,
-            Text hitMarker) {
+            Text hitMarker, AudioManager audioManager) {
         this.world = world;
+        this.audioManager = audioManager;
         this.particles = particles;
         this.tracers = tracers;
         this.explosions = explosions;
@@ -164,6 +167,9 @@ public final class CombatSystem {
         muzzleFlashTimer = 0.06;
         alertZombies.getAsDouble();
 
+        // Play weapon shot sound
+        audioManager.playWeaponShot(currentWeapon);
+
         double[] mw = muzzleWorld(playerYaw, feetY, crouchBlend, playerX, playerZ);
         double fx = Math.sin(Math.toRadians(playerYaw)), fz = Math.cos(Math.toRadians(playerYaw));
         for (int i = 0; i < 3; i++) {
@@ -228,6 +234,7 @@ public final class CombatSystem {
         }
         reloadDur = reloadTimeFor(currentWeapon);
         reloadTimer = reloadDur;
+        audioManager.playReload(currentWeapon);
     }
 
     public void updateActions(double dt) {
@@ -380,6 +387,8 @@ public final class CombatSystem {
         e.alive = false;
         e.deathDir = Constants.RNG.nextBoolean() ? 1 : -1;
         burst(hx, hy, hz, 14, 260, 2.6, 1.2, 500, true, dir, Mats.BLOOD);
+        // Play zombie death sound
+        audioManager.playZombieSound(e.type, "death");
         if (e.type == com.blackout.game.core.Constants.Z_SMOKER) {
             SmokeCloud c = new SmokeCloud();
             c.x = e.model.getTranslateX();

@@ -352,7 +352,7 @@ public class Main extends javafx.application.Application {
         createMotes(world);
 
         // Initialize system classes
-        combatSystem = new CombatSystem(world, RNG, particles, tracers, explosions, grenadeList, smokeClouds, lights, hitMarker);
+        combatSystem = new CombatSystem(world, RNG, particles, tracers, explosions, grenadeList, smokeClouds, lights, hitMarker, audioManager);
         combatSystem.setMuzzleFlash(muzzleFlash, muzzleLight, muzzleLocalY, muzzleLocalZ);
 
         zombieAISystem = new ZombieAISystem(world, enemies, buildings, cars, roadRects,
@@ -368,7 +368,8 @@ public class Main extends javafx.application.Application {
                 () -> feetY,
                 () -> crouched,
                 () -> sprintingNow,
-                () -> grounded);
+                () -> grounded,
+                audioManager);
         zombieAISystem.setStaticBuildingCount(staticBuildingCount);
 
         survivalSystem = new SurvivalSystem(RNG);
@@ -2761,6 +2762,11 @@ public class Main extends javafx.application.Application {
                 worldState.setDoorOpen(b.id, opening);
             }
             status(opening ? "DOOR OPENED" : "DOOR CLOSED", Color.LIGHTGRAY);
+            if (opening) {
+                audioManager.playDoorOpen();
+            } else {
+                audioManager.playDoorClose();
+            }
         }, null);
     }
 
@@ -2825,6 +2831,7 @@ public class Main extends javafx.application.Application {
                 lastShotTime = 0;
                 rebuildWeaponModel();
                 status("EQUIPPED: " + w.displayName, Color.GOLD);
+                audioManager.playWeaponSwap();
             }, null);
         } else if (lock.busy()) {
             return;
@@ -2880,6 +2887,8 @@ public class Main extends javafx.application.Application {
         reloadDur = reloadTimeFor(currentWeapon);
         reloadTimer = reloadDur;
         status("RELOADING...", Color.WHITE);
+        // Play reload sound
+        audioManager.playReload(currentWeapon);
     }
 
     private void startThrow() {
@@ -2915,6 +2924,7 @@ public class Main extends javafx.application.Application {
                 heldItem = prevHeld;
                 rebuildWeaponModel();
                 status("HEALED +55", Color.LIGHTGREEN);
+                audioManager.playHeal();
             }
         }
         if (throwing) {
@@ -2985,6 +2995,10 @@ public class Main extends javafx.application.Application {
             mouseX = e.getSceneX();
             mouseY = e.getSceneY();
         });
+        // Hide OS cursor during active gameplay; show normal cursor when paused
+        if (!paused && !gameOver && !sleeping) {
+            gameScene.setCursor(javafx.scene.Cursor.NONE);
+        }
     }
 
     private void setupKeyboard(Scene scene) {
@@ -3098,6 +3112,8 @@ public class Main extends javafx.application.Application {
         keys.clear();
         firing = false;
         isAiming = false;
+        // Show normal cursor when paused
+        gameScene.setCursor(javafx.scene.Cursor.DEFAULT);
         pauseMsg.setText("");
         pauseOverlay.setVisible(true);
         pauseOverlay.toFront();
@@ -3106,6 +3122,10 @@ public class Main extends javafx.application.Application {
     private void resumeGame() {
         setState(GameState.PLAYING);
         keys.clear();
+        // Hide cursor during active gameplay
+        if (!gameOver && !sleeping) {
+            gameScene.setCursor(javafx.scene.Cursor.NONE);
+        }
         pauseOverlay.setVisible(false);
         rootPane.requestFocus();
     }
@@ -3548,6 +3568,7 @@ public class Main extends javafx.application.Application {
         damageFlash = Math.min(0.85, damageFlash + 0.55);
         shake = Math.max(shake, amount > 100 ? 14 : 7);
         updateHUD();
+        audioManager.playPlayerHurt();
         if (health <= 0) {
             deathCause = cause;
             showGameOver();
@@ -3565,6 +3586,7 @@ public class Main extends javafx.application.Application {
         pauseOverlay.setVisible(false);
         gameOverOverlay.setVisible(true);
         gameOverOverlay.toFront();
+        audioManager.playGameOver();
     }
 
     private void damageEnemy(Enemy e, double dmg, double hx, double hy, double hz, double[] dir, boolean head) {
@@ -3621,6 +3643,8 @@ public class Main extends javafx.application.Application {
                 e.alert = Math.max(e.alert, 8);
             }
         }
+        // Register sound with zombie AI system
+        zombieAISystem.registerSound(px, pz, com.blackout.game.systems.ZombieAISystem.SoundEvent.SoundType.GUNSHOT);
     }
 
     // ===================== SHOOTING =====================
@@ -3650,6 +3674,7 @@ public class Main extends javafx.application.Application {
                 reload();
             } else {
                 status("OUT OF AMMO!", Color.ORANGE);
+                audioManager.playDryFire();
             }
             return;
         }
@@ -3664,6 +3689,8 @@ public class Main extends javafx.application.Application {
         muzzleLight.setLightOn(true);
         muzzleFlashTimer = 0.06;
         alertZombies(currentWeapon == WeaponType.PISTOL ? 700 : 950);
+        // Play weapon shot sound
+        audioManager.playWeaponShot(currentWeapon);
 
         double[] mw = muzzleWorld();
         double fx = Math.sin(Math.toRadians(playerYaw)), fz = Math.cos(Math.toRadians(playerYaw));
@@ -4164,6 +4191,7 @@ public class Main extends javafx.application.Application {
             grenades++;
             status("GRENADE +1", Color.LIGHTGREEN);
         }
+        audioManager.playPickup();
     }
 
     // ===================== HUD =====================

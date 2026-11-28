@@ -15,7 +15,8 @@ public enum Action {
     RELOAD("Reload", KeyCode.R, null),
     FLASHLIGHT("Flashlight", KeyCode.T, null),
     MAP("World map", KeyCode.M, null),
-    QUICK_SAVE("Quick save", KeyCode.F5, null);
+    QUICK_SAVE("Quick save", KeyCode.F5, null),
+    MEDKIT("Use medkit", KeyCode.H, null);
 
     public final String label;
     public final KeyCode defaultPrimary, defaultSecondary;

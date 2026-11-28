@@ -6,6 +6,7 @@ import com.blackout.game.core.Constants;
 import com.blackout.game.entities.Enemy;
 import com.blackout.game.environment.Building;
 import com.blackout.game.environment.Car;
+import com.blackout.game.systems.AudioManager;
 import com.blackout.game.environment.Obstacle;
 import com.blackout.game.effects.SmokeCloud;
 import com.blackout.game.effects.Particle;
@@ -78,6 +79,7 @@ public final class ZombieAISystem {
     private final java.util.function.BooleanSupplier isCrouched;
     private final java.util.function.BooleanSupplier isSprinting;
     private final java.util.function.BooleanSupplier isGrounded;
+    private final AudioManager audioManager;
 
     // Sound system
     private final List<SoundEvent> activeSounds = new ArrayList<>();
@@ -112,7 +114,8 @@ public final class ZombieAISystem {
             java.util.function.DoubleSupplier getFeetY,
             java.util.function.BooleanSupplier isCrouched,
             java.util.function.BooleanSupplier isSprinting,
-            java.util.function.BooleanSupplier isGrounded) {
+            java.util.function.BooleanSupplier isGrounded,
+            AudioManager audioManager) {
         this.world = world;
         this.enemies = enemies;
         this.buildings = buildings;
@@ -131,6 +134,7 @@ public final class ZombieAISystem {
         this.isCrouched = isCrouched;
         this.isSprinting = isSprinting;
         this.isGrounded = isGrounded;
+        this.audioManager = audioManager;
     }
 
     // ===================== SOUND SYSTEM =====================
@@ -502,12 +506,21 @@ public final class ZombieAISystem {
         // Clean up old investigation points
         investigationPoints.removeIf(ip -> System.currentTimeMillis() - ip.created > 30000 || ip.resolved);
 
+        // Cull far enemies - only process those within effective range
+        double effectiveRange = 1300 + getEffThreat.getAsDouble() * 200;
+
         for (Iterator<Enemy> it = enemies.iterator(); it.hasNext();) {
             Enemy e = it.next();
             double ex = e.model.getTranslateX(), ez = e.model.getTranslateZ();
             double dx = px - ex, dz = pz - ez, dist = Math.sqrt(dx * dx + dz * dz);
 
-            // Sound perception
+            // Skip enemies too far from player - they don't need per-frame processing
+            if (dist > effectiveRange) {
+                e.model.setVisible(false);
+                continue;
+            }
+
+            // Sound perception - only for nearby enemies
             if (e.state != com.blackout.game.core.Constants.S_CHASE) {
                 double bestSoundIntensity = 0;
                 SoundEvent bestSound = null;
@@ -527,20 +540,20 @@ public final class ZombieAISystem {
                     e.alert = Math.max(e.alert, 3 * bestSoundIntensity);
                     addInvestigationPoint(bestSound.x, bestSound.z, bestSoundIntensity * 10);
                 }
+            }
 
-                // Check investigation points
-                if (e.state == com.blackout.game.core.Constants.S_IDLE || e.state == com.blackout.game.core.Constants.S_WANDER) {
-                    for (InvestigationPoint ip : investigationPoints) {
-                        if (ip.investigators >= 3) continue; // Max 3 investigators
-                        double ipDist = Math.hypot(ex - ip.x, ez - ip.z);
-                        if (ipDist < 200 && ip.priority > 5) {
-                            ip.investigators++;
-                            e.wx = ip.x;
-                            e.wz = ip.z;
-                            e.state = com.blackout.game.core.Constants.S_WANDER;
-                            e.wanderT = 10;
-                            break;
-                        }
+            // Check investigation points - only when close enough
+            if (dist < 400 && (e.state == com.blackout.game.core.Constants.S_IDLE || e.state == com.blackout.game.core.Constants.S_WANDER)) {
+                for (InvestigationPoint ip : investigationPoints) {
+                    if (ip.investigators >= 3) continue; // Max 3 investigators
+                    double ipDist = Math.hypot(ex - ip.x, ez - ip.z);
+                    if (ipDist < 200 && ip.priority > 5) {
+                        ip.investigators++;
+                        e.wx = ip.x;
+                        e.wz = ip.z;
+                        e.state = com.blackout.game.core.Constants.S_WANDER;
+                        e.wanderT = 10;
+                        break;
                     }
                 }
             }
@@ -553,6 +566,10 @@ public final class ZombieAISystem {
                 e.model.setTranslateY(Constants.GROUND_Y - 9 * e.sy * fp + sink);
                 e.model.setVisible(dist < 1100);
                 if (e.deathTime > 14) {
+                    // Play zombie death sound
+                    if (audioManager != null) {
+                        audioManager.playZombieSound(e.type, "death");
+                    }
                     world.getChildren().remove(e.model);
                     it.remove();
                 }
@@ -569,7 +586,7 @@ public final class ZombieAISystem {
                 }
                 continue;
             }
-            if (dist > 1300) { e.model.setVisible(false); continue; }
+            if (dist > effectiveRange) { e.model.setVisible(false); continue; }
             e.model.setVisible(dist < 1100);
             if (e.spawnTimer > 0) {
                 e.spawnTimer -= dt;
@@ -613,8 +630,12 @@ public final class ZombieAISystem {
             } else if (e.state == com.blackout.game.core.Constants.S_WANDER) {
                 e.wanderT -= dt;
                 faceX = e.wx - ex; faceZ = e.wz - ez;
-                moving = moveEnemy(e, e.wx, e.wz, speed * 0.35, dt);
-                if (dist(ex, ez, e.wx, e.wz) < 15 || e.wanderT <= 0) { e.state = com.blackout.game.core.Constants.S_IDLE; e.idleTimer = 2 + Constants.RNG.nextDouble() * 4; }
+                // Only move when close to waypoint - reduce unnecessary movement processing
+                if (dist(ex, ez, e.wx, e.wz) < 30 || e.wanderT <= 0) {
+                    moveEnemy(e, e.wx, e.wz, speed * 0.35, dt);
+                    e.state = com.blackout.game.core.Constants.S_IDLE;
+                    e.idleTimer = 2 + Constants.RNG.nextDouble() * 4;
+                }
             } else if (e.type == com.blackout.game.core.Constants.Z_SMOKER) {
                 e.castCd -= dt;
                 if (e.windup > 0) {
@@ -660,21 +681,30 @@ public final class ZombieAISystem {
             e.animate(dt, moving, chasing);
         }
 
-        // Separation
-        for (int i = 0; i < enemies.size(); i++) {
-            Enemy a = enemies.get(i);
-            if (!a.alive || a.spawnTimer > 0 || a.hiddenTimer > 0) continue;
-            for (int j = i + 1; j < enemies.size(); j++) {
-                Enemy b = enemies.get(j);
-                if (!b.alive || b.spawnTimer > 0 || b.hiddenTimer > 0) continue;
-                double dx = b.model.getTranslateX() - a.model.getTranslateX(), dz = b.model.getTranslateZ() - a.model.getTranslateZ();
-                double d = Math.sqrt(dx * dx + dz * dz), min = Math.min(80, 36 * (a.sx + b.sx) / 2);
-                if (d < min && d > 0.01) {
-                    double push = (min - d) * 0.5;
-                    a.model.setTranslateX(a.model.getTranslateX() - dx / d * push);
-                    a.model.setTranslateZ(a.model.getTranslateZ() - dz / d * push);
-                    b.model.setTranslateX(b.model.getTranslateX() + dx / d * push);
-                    b.model.setTranslateZ(b.model.getTranslateZ() + dz / d * push);
+        // Separation - only for enemies within effective range, with early exit
+        int activeCount = 0;
+        for (Enemy e : enemies) if (e.alive && e.spawnTimer <= 0 && e.hiddenTimer <= 0) activeCount++;
+        if (activeCount > 1) {
+            // Process separation in batches to reduce per-frame cost
+            for (int i = 0; i < enemies.size(); i++) {
+                Enemy a = enemies.get(i);
+                if (!a.alive || a.spawnTimer > 0 || a.hiddenTimer > 0) continue;
+                boolean pushed = false;
+                for (int j = i + 1; j < enemies.size(); j++) {
+                    Enemy b = enemies.get(j);
+                    if (!b.alive || b.spawnTimer > 0 || b.hiddenTimer > 0) continue;
+                    double dx = b.model.getTranslateX() - a.model.getTranslateX(), dz = b.model.getTranslateZ() - a.model.getTranslateZ();
+                    double d = Math.sqrt(dx * dx + dz * dz), min = Math.min(80, 36 * (a.sx + b.sx) / 2);
+                    if (d < min && d > 0.01) {
+                        double push = (min - d) * 0.5;
+                        a.model.setTranslateX(a.model.getTranslateX() - dx / d * push);
+                        a.model.setTranslateZ(a.model.getTranslateZ() - dz / d * push);
+                        b.model.setTranslateX(b.model.getTranslateX() + dx / d * push);
+                        b.model.setTranslateZ(b.model.getTranslateZ() + dz / d * push);
+                        pushed = true;
+                        // Only check a few neighbors per frame to spread cost
+                        if (pushed && j - i > 3) break;
+                    }
                 }
             }
         }

@@ -18,7 +18,6 @@ import javafx.scene.paint.Color;
 /**
  * Master graphics system that integrates all visual enhancements:
  * - Shadow mapping
- * - Volumetric fog
  * - Sky atmosphere
  * - Blood moon effects
  * - Enhanced fire
@@ -32,7 +31,6 @@ public final class GraphicsSystem {
 
     // Sub-systems
     private final ShadowMap shadowMap;
-    private final VolumetricFog volumetricFog;
     private final SkyAtmosphere skyAtmosphere;
     private final BloodMoonEffects bloodMoonEffects;
     private final EnhancedFire enhancedFire;
@@ -41,7 +39,6 @@ public final class GraphicsSystem {
 
     // Settings
     private boolean shadowsEnabled = true;
-    private boolean fogEnabled = true;
     private boolean skyEnabled = true;
     private boolean bloodMoonEnabled = true;
     private boolean fireEnabled = true;
@@ -61,7 +58,6 @@ public final class GraphicsSystem {
 
         // Initialize sub-systems
         this.shadowMap = new ShadowMap(world, Constants.RNG, buildings, enemies, cars, trees);
-        this.volumetricFog = new VolumetricFog(world);
         this.skyAtmosphere = new SkyAtmosphere(world, dayNight);
         this.bloodMoonEffects = new BloodMoonEffects(world);
         this.enhancedFire = new EnhancedFire(world);
@@ -78,11 +74,6 @@ public final class GraphicsSystem {
         // Update shadow map
         if (shadowsEnabled) {
             shadowMap.update(dt, playerX, playerZ, sunX, sunY, sunZ);
-        }
-
-        // Update volumetric fog
-        if (fogEnabled) {
-            volumetricFog.update(dt, playerX, playerZ, cameraY, weather, dayNight);
         }
 
         // Update sky atmosphere
@@ -150,7 +141,6 @@ public final class GraphicsSystem {
         switch (quality) {
             case LOW -> {
                 shadowsEnabled = false;
-                fogEnabled = false;
                 skyEnabled = true; // Keep sky but simpler
                 bloodMoonEnabled = true;
                 fireEnabled = true;
@@ -159,7 +149,6 @@ public final class GraphicsSystem {
             }
             case MEDIUM -> {
                 shadowsEnabled = true;
-                fogEnabled = true;
                 skyEnabled = true;
                 bloodMoonEnabled = true;
                 fireEnabled = true;
@@ -168,7 +157,6 @@ public final class GraphicsSystem {
             }
             case HIGH -> {
                 shadowsEnabled = true;
-                fogEnabled = true;
                 skyEnabled = true;
                 bloodMoonEnabled = true;
                 fireEnabled = true;
@@ -177,7 +165,6 @@ public final class GraphicsSystem {
             }
             case ULTRA -> {
                 shadowsEnabled = true;
-                fogEnabled = true;
                 skyEnabled = true;
                 bloodMoonEnabled = true;
                 fireEnabled = true;
@@ -192,11 +179,7 @@ public final class GraphicsSystem {
         shadowMap.setEnabled(enabled);
     }
 
-    public void setFogEnabled(boolean enabled) {
-        fogEnabled = enabled;
-        volumetricFog.setEnabled(enabled);
-    }
-
+    
     public void setSkyEnabled(boolean enabled) {
         skyEnabled = enabled;
     }
@@ -222,7 +205,6 @@ public final class GraphicsSystem {
 
     public void dispose() {
         shadowMap.clear();
-        volumetricFog.dispose();
         bloodMoonEffects.dispose();
         enhancedFire.update(0); // Clean up
         muzzleFlash.clear();

@@ -109,37 +109,43 @@ public final class DayNightSystem {
         Color top = mixC(mixC(Color.rgb(3, 5, 14), Color.rgb(40, 3, 7), bb), Color.rgb(58, 118, 200), d);
         Color hor = mixC(mixC(mixC(Color.rgb(30, 44, 70), Color.rgb(105, 16, 16), bb), Color.rgb(165, 205, 235), d), Color.rgb(255, 140, 70), warm * 0.75);
         Color vc = voidColor(d);
+
+        // Optimize: precompute color values and use simpler operations
         for (int y = 0; y < hgt; y++) {
             double v = y / (double) (hgt - 1);
+            double vt = v < hv ? Math.pow(v / hv, 1.7) : Math.min(1, (v - hv) / 0.08);
+            Color topColor = top;
+            Color horColor = hor;
+            Color vcColor = vc;
+
             for (int x = 0; x < w; x++) {
                 double r, g, b;
                 if (v < hv) {
-                    double t = Math.pow(v / hv, 1.7);
-                    r = (top.getRed() * (1 - t) + hor.getRed() * t) * 255;
-                    g = (top.getGreen() * (1 - t) + hor.getGreen() * t) * 255;
-                    b = (top.getBlue() * (1 - t) + hor.getBlue() * t) * 255;
-                    double cl = Math.sin(x * 0.042 + y * 0.1) * Math.sin(x * 0.022 - y * 0.062) + Math.sin(x * 0.094 + 2) * 0.4;
-                    if (cl > 0.2) {
-                        double c = (cl - 0.2) * 14 * (1 - t * 0.5) * (0.4 + 1.4 * d);
-                        r += c; g += c; b += c * 1.2;
-                    }
+                    r = (topColor.getRed() * (1 - vt) + horColor.getRed() * vt) * 255;
+                    g = (topColor.getGreen() * (1 - vt) + horColor.getGreen() * vt) * 255;
+                    b = (topColor.getBlue() * (1 - vt) + horColor.getBlue() * vt) * 255;
                 } else {
-                    double t = Math.min(1, (v - hv) / 0.08);
-                    r = (hor.getRed() * (1 - t) + vc.getRed() * t) * 255;
-                    g = (hor.getGreen() * (1 - t) + vc.getGreen() * t) * 255;
-                    b = (hor.getBlue() * (1 - t) + vc.getBlue() * t) * 255;
+                    r = (horColor.getRed() * (1 - vt) + vcColor.getRed() * vt) * 255;
+                    g = (horColor.getGreen() * (1 - vt) + vcColor.getGreen() * vt) * 255;
+                    b = (horColor.getBlue() * (1 - vt) + vcColor.getBlue() * vt) * 255;
                 }
                 pw.setArgb(x, y, argb(r, g, b));
             }
         }
+
+        // Stars - only add when needed (reduced count)
         double night = 1 - d;
         if (night > 0.05) {
-            int n = (int) (700 * night);
+            int n = Math.min(100, (int) (100 * night)); // Reduced from 700
             for (int i = 0; i < n; i++) {
                 double br = (110 + rng.nextInt(145)) * night;
-                pw.setArgb(rng.nextInt(w), rng.nextInt((int) (hgt * 0.46)), argb(br, br * (1 - bb * 0.5), br * (1 - bb * 0.6) + 10));
+                int rx = rng.nextInt(w);
+                int ry = rng.nextInt((int) (hgt * 0.46));
+                pw.setArgb(rx, ry, argb(br, br * (1 - bb * 0.5), br * (1 - bb * 0.6) + 10));
             }
         }
+
+        // Sun/moon disc - optimized drawDisc calls
         double fs = (h - 6) / 13.0;
         if (fs >= 0 && fs <= 1) {
             drawDisc(img, (0.25 + 0.5 * fs) * w, (hv - Math.sin(Math.PI * fs) * 0.40) * hgt, 10, 46,

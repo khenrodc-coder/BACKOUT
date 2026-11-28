@@ -1,6 +1,8 @@
 package com.blackout.game.systems;
 
 import com.blackout.game.entities.WeaponType;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
@@ -23,6 +25,9 @@ public final class AudioManager {
     private double sfxVolume = 1.0;
     private double musicVolume = 0.5;
     private final Random rng = new Random();
+
+    // Track loading status for diagnostics
+    private final Map<String, String> loadStatus = new HashMap<>();
 
     // Sound categories for volume control
     public enum SoundCategory { MASTER, SFX, MUSIC, AMBIENT, UI, WEAPON, ZOMBIE, ENVIRONMENT, PLAYER }
@@ -60,7 +65,7 @@ public final class AudioManager {
         loadSfx("land", "sounds/player/land.wav");
         loadSfx("crouch", "sounds/player/crouch.wav");
         loadSfx("player_hurt", "sounds/player/hurt.wav");
-        loadSfx("player_death", "sounds/player/death.wav");
+        loadSfx("player_death", "sounds/player/player_death.wav"); // Fixed path
         loadSfx("heal", "sounds/player/heal.wav");
         loadSfx("pickup", "sounds/player/pickup.wav");
 
@@ -90,56 +95,125 @@ public final class AudioManager {
         loadMusic("combat", "music/combat.mp3");
         loadMusic("blood_moon", "music/blood_moon.mp3");
         loadMusic("game_over", "music/game_over.mp3");
+
+        // Print summary
+        long loaded = loadStatus.values().stream().filter(s -> s.startsWith("OK")).count();
+        long failed = loadStatus.values().stream().filter(s -> s.startsWith("FAIL")).count();
+        long missing = loadStatus.values().stream().filter(s -> s.startsWith("MISSING")).count();
+        System.out.println("[AUDIO] Loaded: " + loaded + " SFX, Failed: " + failed + ", Missing: " + missing);
     }
 
-    
-private void loadSfx(String name, String path) {
-    try {
-        URL resource = AudioManager.class.getResource("/" + path);
+    private void loadSfx(String name, String path) {
+        try {
+            URL resource = AudioManager.class.getResource("/" + path);
 
-        if (resource == null) {
-            System.err.println(
-                "[AUDIO WARNING] Missing sound: /" + path
-            );
-            return;
+            if (resource == null) {
+                System.err.println("[AUDIO WARNING] Missing sound resource: /" + path);
+                loadStatus.put(name, "MISSING: " + path);
+                return;
+            }
+
+            // Validate the resource before creating AudioClip
+            if (!validateAudioResource(resource, path)) {
+                System.err.println("[AUDIO ERROR] Invalid/corrupted audio file: /" + path);
+                loadStatus.put(name, "FAIL: " + path + " (invalid format)");
+                return;
+            }
+
+            AudioClip clip = new AudioClip(resource.toExternalForm());
+            soundEffects.put(name, clip);
+            loadStatus.put(name, "OK: " + path);
+
+        } catch (Exception e) {
+            System.err.println("[AUDIO ERROR] Failed to load " + name + " from /" + path + ": " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            loadStatus.put(name, "FAIL: " + path + " (" + e.getClass().getSimpleName() + ")");
         }
-
-        AudioClip clip = new AudioClip(resource.toExternalForm());
-        soundEffects.put(name, clip);
-
-    } catch (Exception e) {
-        System.err.println(
-            "[AUDIO ERROR] Failed to load " + name + ": " + e.getMessage()
-        );
     }
-}
 
-private void loadMusic(String name, String path) {
-    try {
-        URL resource = AudioManager.class.getResource("/" + path);
+    private boolean validateAudioResource(URL resource, String path) {
+        try (InputStream is = resource.openStream()) {
+            // Read first few bytes to check file signature
+            byte[] header = new byte[12];
+            int read = is.read(header);
+            if (read < 4) return false;
 
-        if (resource == null) {
-            System.err.println(
-                "[MUSIC WARNING] Missing music: /" + path
-            );
-            return;
+            // Check for RIFF (WAV)
+            if (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F') {
+                return true;
+            }
+            // Check for OGG
+            if (header[0] == 'O' && header[1] == 'g' && header[2] == 'g' && header[3] == 'S') {
+                return true;
+            }
+            // Check for MP3 (ID3 or MPEG frame sync)
+            if (header[0] == 'I' && header[1] == 'D' && header[2] == '3') {
+                return true;
+            }
+            if (header[0] == (byte)0xFF && (header[1] & 0xE0) == 0xE0) {
+                return true;
+            }
+            // Check for HTML (corrupted files from GitHub)
+            if (header[0] == '<' || (header[0] == 'H' && header[1] == 'T' && header[2] == 'M' && header[3] == 'L')) {
+                return false;
+            }
+            // Check for DOCTYPE (corrupted files)
+            if (header[0] == '<' && header[1] == '!') {
+                return false;
+            }
+
+            // Unknown format - allow but warn
+            System.err.println("[AUDIO WARNING] Unknown audio format for /" + path + " (first bytes: " + bytesToHex(header) + ")");
+            return true;
+
+        } catch (IOException e) {
+            System.err.println("[AUDIO ERROR] Cannot read resource /" + path + ": " + e.getMessage());
+            return false;
         }
-
-        Media media = new Media(resource.toExternalForm());
-
-        MediaPlayer player = new MediaPlayer(media);
-        player.setCycleCount(MediaPlayer.INDEFINITE);
-        player.setVolume(musicVolume * masterVolume);
-
-        musicTracks.put(name, player);
-
-    } catch (Exception e) {
-        System.err.println(
-            "[MUSIC ERROR] Failed to load " + name + ": " + e.getMessage()
-        );
     }
-}
 
+    private String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(bytes.length, 8); i++) {
+            sb.append(String.format("%02X ", bytes[i]));
+        }
+        return sb.toString().trim();
+    }
+
+    private void loadMusic(String name, String path) {
+        try {
+            URL resource = AudioManager.class.getResource("/" + path);
+
+            if (resource == null) {
+                System.err.println("[MUSIC WARNING] Missing music resource: /" + path);
+                loadStatus.put(name, "MISSING: " + path);
+                return;
+            }
+
+            // Validate music resource
+            if (!validateAudioResource(resource, path)) {
+                System.err.println("[MUSIC ERROR] Invalid/corrupted music file: /" + path);
+                loadStatus.put(name, "FAIL: " + path + " (invalid format)");
+                return;
+            }
+
+            Media media = new Media(resource.toExternalForm());
+            MediaPlayer player = new MediaPlayer(media);
+            player.setCycleCount(MediaPlayer.INDEFINITE);
+            player.setVolume(musicVolume * masterVolume);
+
+            // Handle media errors
+            player.setOnError(() -> {
+                System.err.println("[MUSIC ERROR] Playback error for " + name + ": " + player.getError());
+            });
+
+            musicTracks.put(name, player);
+            loadStatus.put(name, "OK: " + path);
+
+        } catch (Exception e) {
+            System.err.println("[MUSIC ERROR] Failed to load " + name + " from /" + path + ": " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            loadStatus.put(name, "FAIL: " + path + " (" + e.getClass().getSimpleName() + ")");
+        }
+    }
 
     // ===================== PLAYBACK =====================
     public void playSfx(String name) {
@@ -300,5 +374,59 @@ private void loadMusic(String name, String path) {
         stopMusic();
         playSfx("player_death", 1.0, 1.0, false);
         playMusic("game_over");
+    }
+
+    public void playWeaponSwap() {
+        playSfx("weapon_swap", 0.5, 1.0, false);
+    }
+
+    public void playDryFire() {
+        playSfx("dry_fire", 0.5, 1.0, false);
+    }
+
+    public void playPickup() {
+        playSfx("pickup", 0.5, 1.0, false);
+    }
+
+    public void playHeal() {
+        playSfx("heal", 0.6, 1.0, false);
+    }
+
+    public void playPlayerHurt() {
+        playSfx("player_hurt", 0.7, 1.0, false);
+    }
+
+    public void playDoorOpen() {
+        playSfx("door_open", 0.6, 1.0, false);
+    }
+
+    public void playDoorClose() {
+        playSfx("door_close", 0.6, 1.0, false);
+    }
+
+    public void playDoorBreak() {
+        playSfx("door_break", 0.8, 1.0, false);
+    }
+
+    public void playGlassBreak() {
+        playSfx("glass_break", 0.7, 1.0, false);
+    }
+
+    public void playExplosion() {
+        playSfx("explosion", 1.0, 0.9 + rng.nextDouble() * 0.2, false);
+    }
+
+    // Diagnostic method
+    public Map<String, String> getLoadStatus() {
+        return new HashMap<>(loadStatus);
+    }
+
+    public void dispose() {
+        stopMusic();
+        for (MediaPlayer player : musicTracks.values()) {
+            player.dispose();
+        }
+        musicTracks.clear();
+        soundEffects.clear();
     }
 }
